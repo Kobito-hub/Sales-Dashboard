@@ -9,7 +9,12 @@ import ResultsTable from './components/ResultsTable';
 import ColorPicker from './components/ColorPicker';
 import YtgTable from './components/YtgTable';
 import { buildPeriodTableRows, buildYtgRows } from './utils/calculations';
-import { getBrandGroupLabel, parseSalesFile, parseTargetFile } from './utils/excelParser';
+import {
+  getBrandGroupLabel,
+  getComparableSkuKey,
+  parseSalesFile,
+  parseTargetFile,
+} from './utils/excelParser';
 
 const PERIOD_LABELS: Record<AnalysisPeriod, string> = {
   wtd: 'Week to Date',
@@ -58,7 +63,7 @@ function App() {
       return sales2026;
     }
 
-    return sales2026.filter((sale) => targets.has(sale.description));
+    return mapSalesToTargetBrands(sales2026, targets);
   }, [sales2026, targets]);
 
   const relevantSales2025 = useMemo(() => {
@@ -66,7 +71,7 @@ function App() {
       return sales2025;
     }
 
-    return sales2025.filter((sale) => targets.has(sale.description));
+    return mapSalesToTargetBrands(sales2025, targets);
   }, [sales2025, targets]);
 
   const effectiveBrands = useMemo(() => {
@@ -258,7 +263,7 @@ function App() {
         <section className="dashboard-grid dashboard-grid--intro">
           <div className="dashboard-card dashboard-card--soft">
             <h2 className="dashboard-heading">Upload source files</h2>
-            <div className="dashboard-body grid gap-4 md:grid-cols-3">
+            <div className="dashboard-body dashboard-upload-grid">
               <FileUploader label="Sales dump 2026" onUpload={handleSalesUpload(setSales2026)} />
               <FileUploader label="Target" onUpload={handleTargetUpload} />
               <FileUploader label="Sales dump 2025" onUpload={handleSalesUpload(setSales2025)} />
@@ -444,6 +449,32 @@ function getErrorMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function mapSalesToTargetBrands(
+  sales: SalesRow[],
+  targets: Map<string, TargetRow>,
+): SalesRow[] {
+  const targetKeyMap = new Map<string, string>();
+
+  for (const targetName of targets.keys()) {
+    targetKeyMap.set(getComparableSkuKey(targetName), targetName);
+  }
+
+  return sales
+    .map((sale) => {
+      const matchedTarget = targetKeyMap.get(getComparableSkuKey(sale.description));
+
+      if (!matchedTarget) {
+        return null;
+      }
+
+      return {
+        ...sale,
+        description: matchedTarget,
+      };
+    })
+    .filter((sale): sale is SalesRow => sale !== null);
 }
 
 export default App;

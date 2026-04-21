@@ -145,8 +145,14 @@ function normalizeSku(value: unknown): string {
 }
 
 export function canonicalizeSku(value: unknown): string {
-  const normalized = normalizeSku(value);
-  return normalized.replace(/\s+[xX]\s*\d+\s*$/, '').trim();
+  const normalized = normalizeSku(value)
+    .replace(/[’`]/g, "'")
+    .replace(/\s*-\s*/g, ' - ')
+    .replace(/\s+[xX]\s*\d+\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return normalized;
 }
 
 export function getSizeGroupLabel(brand: string): string {
@@ -162,14 +168,32 @@ export function getSizeGroupLabel(brand: string): string {
 
 export function getBrandGroupLabel(brand: string): string {
   const normalized = normalizeSku(brand).replace(/^\d+(?:\.\d+)?\s*(?:cl|ml|l)\s+/i, '');
-  const withoutVariant = normalized.split('-')[0]?.trim() ?? normalized;
-  const firstWord = withoutVariant.split(/\s+/)[0]?.trim();
+  const baseBrand = normalized.split('-')[0]?.trim() ?? normalized;
+  const comparable = getComparableSkuKey(baseBrand);
 
-  if (!firstWord) {
+  if (!comparable) {
     return 'other';
   }
 
-  return firstWord;
+  return comparable
+    .split(' ')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function getComparableSkuKey(value: unknown): string {
+  const normalized = canonicalizeSku(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/['".,()/]/g, ' ')
+    .replace(/[^a-zA-Z0-9 -]/g, ' ')
+    .replace(/\s*-\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  return normalized;
 }
 
 function findTargetHeaderRowIndex(rows: unknown[][]): number {
