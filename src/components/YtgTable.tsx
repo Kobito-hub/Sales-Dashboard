@@ -7,9 +7,20 @@ interface Props {
   total: YtgRow | null;
   headerColor: string;
   firstColColor: string;
+  outlineColor: string;
+  headerTextColor: string;
+  bodyTextColor: string;
 }
 
-export default function YtgTable({ rows, total, headerColor, firstColColor }: Props) {
+export default function YtgTable({
+  rows,
+  total,
+  headerColor,
+  firstColColor,
+  outlineColor,
+  headerTextColor,
+  bodyTextColor,
+}: Props) {
   const tableRef = useRef<HTMLTableElement>(null);
 
   const exportToExcel = () => {
@@ -34,21 +45,23 @@ export default function YtgTable({ rows, total, headerColor, firstColColor }: Pr
 
   const copyTable = async () => {
     const rowsToCopy = [
-      ['SKU', '2026 Target', 'YTD Actual %Achieved of FY', 'YTG VOL BALANCE'],
+      ['SKU', '2026 Target', 'YTD Actual', '% Achieved of FY', 'YTG VOL. BALANCE'],
       ...rows.map((row) => [
         row.sku,
-        row.target2026.toFixed(2),
+        formatNumber(row.target2026),
+        formatNumber(row.ytdActual),
         `${row.ytdAchievedPercent.toFixed(2)}%`,
-        row.ytgBalance.toFixed(2),
+        formatNumber(row.ytgBalance),
       ]),
     ];
 
     if (total) {
       rowsToCopy.push([
         'TOTAL',
-        total.target2026.toFixed(2),
+        formatNumber(total.target2026),
+        formatNumber(total.ytdActual),
         `${total.ytdAchievedPercent.toFixed(2)}%`,
-        total.ytgBalance.toFixed(2),
+        formatNumber(total.ytgBalance),
       ]);
     }
 
@@ -66,40 +79,57 @@ export default function YtgTable({ rows, total, headerColor, firstColColor }: Pr
           Copy Table
         </button>
       </div>
-      <table ref={tableRef} className="w-full border-collapse overflow-hidden rounded-2xl text-left text-sm">
+      <table ref={tableRef} className="w-full border-collapse overflow-hidden rounded-2xl text-left text-sm" style={{ color: bodyTextColor }}>
         <thead>
-          <tr style={{ backgroundColor: headerColor }}>
-            <th className="border border-stone-200 px-4 py-3 font-semibold" style={{ backgroundColor: firstColColor }}>
+          <tr style={{ backgroundColor: headerColor, color: headerTextColor }}>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor, firstColColor)}>
               SKU
             </th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">2026 Target</th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">YTD Actual %Achieved of FY</th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">YTG VOL BALANCE</th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>2026 Target</th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>YTD Actual</th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>% Achieved of FY</th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>YTG VOL. BALANCE</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.sku} className="bg-white even:bg-stone-50/50">
-              <td className="border border-stone-200 px-4 py-3 font-medium" style={{ backgroundColor: firstColColor }}>
+              <td className="px-4 py-3 font-medium" style={getCellStyle(outlineColor, firstColColor)}>
                 {row.sku}
               </td>
-              <td className="border border-stone-200 px-4 py-3">{row.target2026.toFixed(2)}</td>
-              <td className="border border-stone-200 px-4 py-3">{row.ytdAchievedPercent.toFixed(2)}%</td>
-              <td className="border border-stone-200 px-4 py-3">{row.ytgBalance.toFixed(2)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.target2026)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.ytdActual)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.ytdAchievedPercent)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.ytgBalance)}</td>
             </tr>
           ))}
           {total && (
             <tr className="font-bold">
-              <td className="border border-stone-200 px-4 py-3" style={{ backgroundColor: firstColColor }}>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor, firstColColor)}>
                 TOTAL
               </td>
-              <td className="border border-stone-200 px-4 py-3">{total.target2026.toFixed(2)}</td>
-              <td className="border border-stone-200 px-4 py-3">{total.ytdAchievedPercent.toFixed(2)}%</td>
-              <td className="border border-stone-200 px-4 py-3">{total.ytgBalance.toFixed(2)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(total.target2026)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(total.ytdActual)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(total.ytdAchievedPercent)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(total.ytgBalance)}</td>
             </tr>
           )}
         </tbody>
       </table>
     </div>
   );
+}
+
+function getCellStyle(outlineColor: string, backgroundColor?: string) {
+  return {
+    border: `1px solid ${outlineColor}`,
+    backgroundColor,
+  };
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }

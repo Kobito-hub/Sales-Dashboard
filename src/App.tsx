@@ -9,7 +9,7 @@ import ResultsTable from './components/ResultsTable';
 import ColorPicker from './components/ColorPicker';
 import YtgTable from './components/YtgTable';
 import { buildPeriodTableRows, buildYtgRows } from './utils/calculations';
-import { parseSalesFile, parseTargetFile } from './utils/excelParser';
+import { getBrandGroupLabel, parseSalesFile, parseTargetFile } from './utils/excelParser';
 
 const PERIOD_LABELS: Record<AnalysisPeriod, string> = {
   wtd: 'Week to Date',
@@ -18,26 +18,56 @@ const PERIOD_LABELS: Record<AnalysisPeriod, string> = {
 };
 
 function App() {
+  const today = new Date();
+
   const [targets, setTargets] = useState<Map<string, TargetRow>>(new Map());
   const [sales2026, setSales2026] = useState<SalesRow[]>([]);
   const [sales2025, setSales2025] = useState<SalesRow[]>([]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [weekDays, setWeekDays] = useState<number>(5);
-  const [monthDays, setMonthDays] = useState<number>(15);
+  const [targetDaysInMonth, setTargetDaysInMonth] = useState<number>(31);
+  const [targetDaysInWeek, setTargetDaysInWeek] = useState<number>(5);
+  const [currentDayWorked, setCurrentDayWorked] = useState<number>(today.getDate());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [actualWeekStartMonth, setActualWeekStartMonth] = useState<number>(today.getMonth());
+  const [actualWeekStartDay, setActualWeekStartDay] = useState<number>(today.getDate());
+  const [actualWeekEndMonth, setActualWeekEndMonth] = useState<number>(today.getMonth());
+  const [actualWeekEndDay, setActualWeekEndDay] = useState<number>(today.getDate());
+  const [actualMonthStartMonth, setActualMonthStartMonth] = useState<number>(today.getMonth());
+  const [actualMonthStartDay, setActualMonthStartDay] = useState<number>(1);
+  const [actualMonthEndMonth, setActualMonthEndMonth] = useState<number>(today.getMonth());
+  const [actualMonthEndDay, setActualMonthEndDay] = useState<number>(today.getDate());
+  const [actualYearStartMonth, setActualYearStartMonth] = useState<number>(0);
+  const [actualYearStartDay, setActualYearStartDay] = useState<number>(1);
+  const [actualYearEndMonth, setActualYearEndMonth] = useState<number>(today.getMonth());
+  const [actualYearEndDay, setActualYearEndDay] = useState<number>(today.getDate());
   const [headerColor, setHeaderColor] = useState('#4F81BD');
   const [firstColColor, setFirstColColor] = useState('#DCE6F1');
+  const [outlineColor, setOutlineColor] = useState('#D6D3D1');
+  const [headerTextColor, setHeaderTextColor] = useState('#FFFFFF');
+  const [bodyTextColor, setBodyTextColor] = useState('#1C1917');
   const [activePeriod, setActivePeriod] = useState<AnalysisPeriod>('ytd');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const availableBrands = useMemo(() => {
-    const brands = new Set<string>();
+    return Array.from(targets.keys()).sort((a, b) => a.localeCompare(b));
+  }, [targets]);
 
-    sales2026.forEach((sale) => brands.add(sale.description));
+  const relevantSales2026 = useMemo(() => {
+    if (!targets.size) {
+      return sales2026;
+    }
 
-    return Array.from(brands).sort((a, b) => a.localeCompare(b));
-  }, [sales2026]);
+    return sales2026.filter((sale) => targets.has(sale.description));
+  }, [sales2026, targets]);
+
+  const relevantSales2025 = useMemo(() => {
+    if (!targets.size) {
+      return sales2025;
+    }
+
+    return sales2025.filter((sale) => targets.has(sale.description));
+  }, [sales2025, targets]);
 
   const effectiveBrands = useMemo(() => {
     if (selectedBrands.length > 0) {
@@ -52,35 +82,95 @@ function App() {
       wtd: buildPeriodTableRows({
         brands: effectiveBrands,
         targets,
-        sales2026,
-        sales2025,
+        sales2026: relevantSales2026,
+        sales2025: relevantSales2025,
         selectedMonth,
-        monthDays,
-        weekDays,
+        targetDaysInMonth,
+        targetDaysInWeek,
+        currentDayWorked,
+        actualWeekStartMonth,
+        actualWeekStartDay,
+        actualWeekEndMonth,
+        actualWeekEndDay,
+        actualMonthStartMonth,
+        actualMonthStartDay,
+        actualMonthEndMonth,
+        actualMonthEndDay,
+        actualYearStartMonth,
+        actualYearStartDay,
+        actualYearEndMonth,
+        actualYearEndDay,
         period: 'wtd',
       }),
       mtd: buildPeriodTableRows({
         brands: effectiveBrands,
         targets,
-        sales2026,
-        sales2025,
+        sales2026: relevantSales2026,
+        sales2025: relevantSales2025,
         selectedMonth,
-        monthDays,
-        weekDays,
+        targetDaysInMonth,
+        targetDaysInWeek,
+        currentDayWorked,
+        actualWeekStartMonth,
+        actualWeekStartDay,
+        actualWeekEndMonth,
+        actualWeekEndDay,
+        actualMonthStartMonth,
+        actualMonthStartDay,
+        actualMonthEndMonth,
+        actualMonthEndDay,
+        actualYearStartMonth,
+        actualYearStartDay,
+        actualYearEndMonth,
+        actualYearEndDay,
         period: 'mtd',
       }),
       ytd: buildPeriodTableRows({
         brands: effectiveBrands,
         targets,
-        sales2026,
-        sales2025,
+        sales2026: relevantSales2026,
+        sales2025: relevantSales2025,
         selectedMonth,
-        monthDays,
-        weekDays,
+        targetDaysInMonth,
+        targetDaysInWeek,
+        currentDayWorked,
+        actualWeekStartMonth,
+        actualWeekStartDay,
+        actualWeekEndMonth,
+        actualWeekEndDay,
+        actualMonthStartMonth,
+        actualMonthStartDay,
+        actualMonthEndMonth,
+        actualMonthEndDay,
+        actualYearStartMonth,
+        actualYearStartDay,
+        actualYearEndMonth,
+        actualYearEndDay,
         period: 'ytd',
       }),
     }),
-    [effectiveBrands, monthDays, sales2025, sales2026, selectedMonth, targets, weekDays],
+    [
+      actualYearEndDay,
+      actualYearEndMonth,
+      actualYearStartDay,
+      actualYearStartMonth,
+      actualMonthEndDay,
+      actualMonthEndMonth,
+      actualMonthStartDay,
+      actualMonthStartMonth,
+      actualWeekEndDay,
+      actualWeekEndMonth,
+      actualWeekStartDay,
+      actualWeekStartMonth,
+      currentDayWorked,
+      effectiveBrands,
+      relevantSales2025,
+      relevantSales2026,
+      selectedMonth,
+      targetDaysInMonth,
+      targetDaysInWeek,
+      targets,
+    ],
   );
 
   const activeResults = periodResults[activePeriod];
@@ -90,11 +180,21 @@ function App() {
       buildYtgRows({
         brands: effectiveBrands,
         targets,
-        sales2026,
-        selectedMonth,
-        monthDays,
+        sales2026: relevantSales2026,
+        actualYearStartMonth,
+        actualYearStartDay,
+        actualYearEndMonth,
+        actualYearEndDay,
       }),
-    [effectiveBrands, monthDays, sales2026, selectedMonth, targets],
+    [
+      actualYearEndDay,
+      actualYearEndMonth,
+      actualYearStartDay,
+      actualYearStartMonth,
+      effectiveBrands,
+      relevantSales2026,
+      targets,
+    ],
   );
 
   const summary = useMemo(() => {
@@ -117,7 +217,7 @@ function App() {
     try {
       const parsedTargets = await parseTargetFile(file);
       setTargets(parsedTargets);
-      setSelectedBrands((current) => current.filter((brand) => availableBrands.includes(brand)));
+      setSelectedBrands((current) => current.filter((brand) => parsedTargets.has(brand)));
     } catch (uploadError) {
       setError(getErrorMessage(uploadError, 'Unable to parse the target file.'));
     } finally {
@@ -188,12 +288,38 @@ function App() {
               <h2 className="dashboard-heading">Controls</h2>
               <div className="dashboard-body">
                 <DateControls
-                  weekDays={weekDays}
-                  setWeekDays={setWeekDays}
-                  monthDays={monthDays}
-                  setMonthDays={setMonthDays}
+                  targetDaysInMonth={targetDaysInMonth}
+                  setTargetDaysInMonth={setTargetDaysInMonth}
+                  targetDaysInWeek={targetDaysInWeek}
+                  setTargetDaysInWeek={setTargetDaysInWeek}
+                  currentDayWorked={currentDayWorked}
+                  setCurrentDayWorked={setCurrentDayWorked}
                   selectedMonth={selectedMonth}
                   setSelectedMonth={setSelectedMonth}
+                  actualWeekStartMonth={actualWeekStartMonth}
+                  setActualWeekStartMonth={setActualWeekStartMonth}
+                  actualWeekStartDay={actualWeekStartDay}
+                  setActualWeekStartDay={setActualWeekStartDay}
+                  actualWeekEndMonth={actualWeekEndMonth}
+                  setActualWeekEndMonth={setActualWeekEndMonth}
+                  actualWeekEndDay={actualWeekEndDay}
+                  setActualWeekEndDay={setActualWeekEndDay}
+                  actualMonthStartMonth={actualMonthStartMonth}
+                  setActualMonthStartMonth={setActualMonthStartMonth}
+                  actualMonthStartDay={actualMonthStartDay}
+                  setActualMonthStartDay={setActualMonthStartDay}
+                  actualMonthEndMonth={actualMonthEndMonth}
+                  setActualMonthEndMonth={setActualMonthEndMonth}
+                  actualMonthEndDay={actualMonthEndDay}
+                  setActualMonthEndDay={setActualMonthEndDay}
+                  actualYearStartMonth={actualYearStartMonth}
+                  setActualYearStartMonth={setActualYearStartMonth}
+                  actualYearStartDay={actualYearStartDay}
+                  setActualYearStartDay={setActualYearStartDay}
+                  actualYearEndMonth={actualYearEndMonth}
+                  setActualYearEndMonth={setActualYearEndMonth}
+                  actualYearEndDay={actualYearEndDay}
+                  setActualYearEndDay={setActualYearEndDay}
                 />
               </div>
               <ColorPicker
@@ -201,19 +327,26 @@ function App() {
                 setHeaderColor={setHeaderColor}
                 firstColColor={firstColColor}
                 setFirstColColor={setFirstColColor}
+                outlineColor={outlineColor}
+                setOutlineColor={setOutlineColor}
+                headerTextColor={headerTextColor}
+                setHeaderTextColor={setHeaderTextColor}
+                bodyTextColor={bodyTextColor}
+                setBodyTextColor={setBodyTextColor}
               />
             </div>
 
             <div className="dashboard-card">
               <div className="dashboard-card__header">
                 <h2 className="dashboard-heading">Brand selector</h2>
-                <span className="dashboard-meta">Populated from 2026 sales dump</span>
+                <span className="dashboard-meta">Populated from target sheet</span>
               </div>
               <div className="dashboard-body">
                 <BrandSelector
                   brands={availableBrands}
                   selected={selectedBrands}
                   onChange={setSelectedBrands}
+                  getGroupLabel={getBrandGroupLabel}
                 />
               </div>
             </div>
@@ -225,8 +358,8 @@ function App() {
                 <div>
                   <h2 className="dashboard-heading">Performance analysis</h2>
                   <p className="dashboard-copy">
-                    Choose a period to view `SKU, FY '26 TGT, FY '26 ACT, %contr. (Act.
-                    Vs Tgt.), vs'25`.
+                    Choose a period to view `SKU, FY '26 TGT, FY '26 ACT, %CONTR.,
+                    Act vs Tgt, vs'25`.
                   </p>
                 </div>
                 <div className="dashboard-pill-group">
@@ -244,17 +377,20 @@ function App() {
               </div>
               <div className="dashboard-body dashboard-note">
                 <strong>{PERIOD_LABELS[activePeriod]}:</strong>{' '}
-                WTD uses `(month sales / 26) * worked days`, MTD uses selected month
-                days, and YTD adds full months before the selected month plus the
-                current MTD portion.
+                Target uses its own controls while actuals come from the date ranges
+                you choose for week and month. YTD actual sums from January to the
+                selected month and current day worked.
               </div>
               <div className="dashboard-body">
                 <ResultsTable
-                  title={`${activePeriod.toUpperCase()} Analysis`}
+                  period={activePeriod}
                   rows={activeResults.rows}
                   totals={activeResults.totals}
                   headerColor={headerColor}
                   firstColColor={firstColColor}
+                  outlineColor={outlineColor}
+                  headerTextColor={headerTextColor}
+                  bodyTextColor={bodyTextColor}
                   fileName={`${activePeriod}-analysis.xlsx`}
                 />
               </div>
@@ -273,6 +409,9 @@ function App() {
                   total={ytgResults.total}
                   headerColor={headerColor}
                   firstColColor={firstColColor}
+                  outlineColor={outlineColor}
+                  headerTextColor={headerTextColor}
+                  bodyTextColor={bodyTextColor}
                 />
               </div>
             </div>

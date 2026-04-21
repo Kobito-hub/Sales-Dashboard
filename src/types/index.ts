@@ -19,13 +19,15 @@ export interface TableRow {
   sku: string;
   fy26Target: number;
   fy26Act: number;
-  percentVsTarget: number; // (Act / Tgt)*100
+  contributionPercent: number; // Act / total actual * 100
+  actVsTarget: number; // (Act / Tgt) * 100
   vs25: number; // (Act2026 / Act2025 - 1)*100
 }
 
 export interface YtgRow {
   sku: string;
   target2026: number;
+  ytdActual: number;
   ytdAchievedPercent: number;
   ytgBalance: number;
 }

@@ -1,27 +1,39 @@
-// components/ResultsTable.tsx
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';
-import type { TableRow } from '../types';
+import type { AnalysisPeriod, TableRow } from '../types';
 
 interface Props {
-  title: string;
+  period: AnalysisPeriod;
   rows: TableRow[];
   totals: TableRow | null;
   headerColor: string;
   firstColColor: string;
+  outlineColor: string;
+  headerTextColor: string;
+  bodyTextColor: string;
   fileName: string;
 }
 
+const PERIOD_TITLES: Record<AnalysisPeriod, string> = {
+  wtd: 'SKU CONTRIBUTION WTD',
+  mtd: 'SKU CONTRIBUTION MTD',
+  ytd: 'SKU CONTRIBUTION YTD',
+};
+
 export default function ResultsTable({
-  title,
+  period,
   rows,
   totals,
   headerColor,
   firstColColor,
+  outlineColor,
+  headerTextColor,
+  bodyTextColor,
   fileName,
 }: Props) {
   const tableRef = useRef<HTMLTableElement>(null);
-  
+  const title = PERIOD_TITLES[period];
+
   const exportToExcel = () => {
     if (!tableRef.current) {
       return;
@@ -41,74 +53,124 @@ export default function ResultsTable({
 
     URL.revokeObjectURL(url);
   };
-  
-  const copyTable = async () => {
-    if (!tableRef.current) {
-      return;
-    }
 
+  const copyTable = async () => {
     const rowsToCopy = [
-      ["SKU", "FY '26 TGT", "FY '26 ACT", "%contr. (Act. Vs Tgt.)", "vs'25"],
+      [title],
+      ['SKU', "FY '26 TGT", "FY '26 ACT", '%CONTR.', 'Act vs Tgt', "vs'25"],
       ...rows.map((row) => [
         row.sku,
-        row.fy26Target.toFixed(2),
-        row.fy26Act.toFixed(2),
-        `${row.percentVsTarget.toFixed(2)}%`,
-        `${row.vs25.toFixed(2)}%`,
+        formatNumber(row.fy26Target),
+        formatNumber(row.fy26Act),
+        `${formatNumber(row.contributionPercent)}%`,
+        `${formatNumber(row.actVsTarget)}%`,
+        `${formatNumber(row.vs25)}%`,
       ]),
     ];
 
     if (totals) {
       rowsToCopy.push([
         'TOTAL',
-        totals.fy26Target.toFixed(2),
-        totals.fy26Act.toFixed(2),
-        `${totals.percentVsTarget.toFixed(2)}%`,
-        `${totals.vs25.toFixed(2)}%`,
+        formatNumber(totals.fy26Target),
+        formatNumber(totals.fy26Act),
+        `${formatNumber(totals.contributionPercent)}%`,
+        `${formatNumber(totals.actVsTarget)}%`,
+        `${formatNumber(totals.vs25)}%`,
       ]);
     }
 
-    const tabSeparated = rowsToCopy.map((row) => row.join('\t')).join('\n');
-    await navigator.clipboard.writeText(tabSeparated);
+    await navigator.clipboard.writeText(rowsToCopy.map((row) => row.join('\t')).join('\n'));
   };
-  
+
   return (
     <div>
-      <div className="flex gap-2 mb-2">
-        <button onClick={exportToExcel} className="bg-green-600 text-white px-4 py-1 rounded">Download Excel</button>
-        <button onClick={copyTable} className="bg-blue-600 text-white px-4 py-1 rounded">Copy Table</button>
+      <div className="mb-2 flex gap-2">
+        <button onClick={exportToExcel} className="rounded bg-green-600 px-4 py-1 text-white">
+          Download Excel
+        </button>
+        <button onClick={copyTable} className="rounded bg-blue-600 px-4 py-1 text-white">
+          Copy Table
+        </button>
       </div>
-      <table ref={tableRef} className="w-full border-collapse overflow-hidden rounded-2xl text-left text-sm">
+      <table
+        ref={tableRef}
+        className="w-full border-collapse overflow-hidden rounded-2xl text-left text-sm"
+        style={{ color: bodyTextColor }}
+      >
         <thead>
-          <tr style={{ backgroundColor: headerColor }}>
-            <th className="border border-stone-200 px-4 py-3 font-semibold" style={{ backgroundColor: firstColColor }}>SKU</th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">FY '26 TGT</th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">FY '26 ACT</th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">%contr. (Act. Vs Tgt.)</th>
-            <th className="border border-stone-200 px-4 py-3 font-semibold">vs'25</th>
+          <tr>
+            <th
+              colSpan={6}
+              className="px-4 py-3 text-center text-base font-semibold"
+              style={{
+                backgroundColor: headerColor,
+                color: headerTextColor,
+                border: `1px solid ${outlineColor}`,
+              }}
+            >
+              {title}
+            </th>
+          </tr>
+          <tr style={{ backgroundColor: headerColor, color: headerTextColor }}>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor, firstColColor)}>
+              SKU
+            </th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>
+              FY '26 TGT
+            </th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>
+              FY '26 ACT
+            </th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>
+              %CONTR.
+            </th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>
+              Act vs Tgt
+            </th>
+            <th className="px-4 py-3 font-semibold" style={getCellStyle(outlineColor)}>
+              vs'25
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="bg-white even:bg-stone-50/50">
-              <td className="border border-stone-200 px-4 py-3 font-medium" style={{ backgroundColor: firstColColor }}>{row.sku}</td>
-              <td className="border border-stone-200 px-4 py-3">{row.fy26Target.toFixed(2)}</td>
-              <td className="border border-stone-200 px-4 py-3">{row.fy26Act.toFixed(2)}</td>
-              <td className="border border-stone-200 px-4 py-3">{row.percentVsTarget.toFixed(2)}%</td>
-              <td className="border border-stone-200 px-4 py-3">{row.vs25.toFixed(2)}%</td>
+          {rows.map((row) => (
+            <tr key={row.sku} className="bg-white even:bg-stone-50/50">
+              <td className="px-4 py-3 font-medium" style={getCellStyle(outlineColor, firstColColor)}>
+                {row.sku}
+              </td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.fy26Target)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.fy26Act)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.contributionPercent)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.actVsTarget)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(row.vs25)}%</td>
             </tr>
           ))}
           {totals && (
             <tr className="font-bold">
-              <td className="border border-stone-200 px-4 py-3" style={{ backgroundColor: firstColColor }}>TOTAL</td>
-              <td className="border border-stone-200 px-4 py-3">{totals.fy26Target.toFixed(2)}</td>
-              <td className="border border-stone-200 px-4 py-3">{totals.fy26Act.toFixed(2)}</td>
-              <td className="border border-stone-200 px-4 py-3">{totals.percentVsTarget.toFixed(2)}%</td>
-              <td className="border border-stone-200 px-4 py-3">{totals.vs25.toFixed(2)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor, firstColColor)}>TOTAL</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(totals.fy26Target)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(totals.fy26Act)}</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(totals.contributionPercent)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(totals.actVsTarget)}%</td>
+              <td className="px-4 py-3" style={getCellStyle(outlineColor)}>{formatNumber(totals.vs25)}%</td>
             </tr>
           )}
         </tbody>
       </table>
     </div>
   );
+}
+
+function getCellStyle(outlineColor: string, backgroundColor?: string) {
+  return {
+    border: `1px solid ${outlineColor}`,
+    backgroundColor,
+  };
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
