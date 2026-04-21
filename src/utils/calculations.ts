@@ -97,28 +97,18 @@ export function buildPeriodTableRows(params: {
     ? aggregateSalesBetweenDates(sales2025, yearRange2025.start, yearRange2025.end)
     : new Map<string, number>();
 
-  const intermediateRows = brands
-    .map((brand) => {
-      const targetRow = targets.get(brand);
-
-      if (!targetRow) {
-        return null;
-      }
-
-      let fy26Target = 0;
-      let fy26Act = 0;
-      let fy25Act = 0;
+  const intermediateRows = brands.map((brand) => {    const targetRow = targets.get(brand);    let fy26Target = 0;    let fy26Act = 0;    let fy25Act = 0;
 
       if (period === 'wtd') {
-        fy26Target = calculateSelectedMonthTarget(targetRow, selectedMonth, clampedMonthDays, clampedWeekDays);
+        fy26Target = targetRow ? calculateSelectedMonthTarget(targetRow, selectedMonth, clampedMonthDays, clampedWeekDays) : 0;
         fy26Act = sales2026Wtd.get(brand) ?? 0;
         fy25Act = sales2025Wtd.get(brand) ?? 0;
       } else if (period === 'mtd') {
-        fy26Target = calculateMtdTarget(targetRow, selectedMonth, clampedWeekDays, clampedCurrentDay);
+        fy26Target = targetRow ? calculateMtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
         fy26Act = sales2026Mtd.get(brand) ?? 0;
         fy25Act = sales2025Mtd.get(brand) ?? 0;
       } else {
-        fy26Target = calculateYtdTarget(targetRow, selectedMonth, clampedWeekDays, clampedCurrentDay);
+        fy26Target = targetRow ? calculateYtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
         fy26Act = sales2026Ytd.get(brand) ?? 0;
         fy25Act = sales2025Ytd.get(brand) ?? 0;
       }
@@ -129,11 +119,7 @@ export function buildPeriodTableRows(params: {
         fy26Target,
         fy25Act,
       };
-    })
-    .filter(
-      (row): row is { sku: string; fy26Act: number; fy26Target: number; fy25Act: number } =>
-        row !== null,
-    );
+    });
 
   const totalActual = intermediateRows.reduce((sum, row) => sum + row.fy26Act, 0);
   const totalTarget = intermediateRows.reduce((sum, row) => sum + row.fy26Target, 0);
@@ -261,17 +247,17 @@ function calculateSelectedMonthTarget(
   return (monthlyTarget / targetDaysInMonth) * targetDaysInWeek;
 }
 
-export function calculateMtdTarget(targetRow: TargetRow, monthIndex: number, daysInWeek: number, currentDayWorked: number): number {
+export function calculateMtdTarget(targetRow: TargetRow, monthIndex: number, daysInMonth: number, currentDayWorked: number): number {
   const monthlyTarget = targetRow.monthlyTargets[monthIndex] ?? 0;
-  return (monthlyTarget / daysInWeek) * currentDayWorked;
+  return (monthlyTarget / daysInMonth) * currentDayWorked;
 }
 
-export function calculateYtdTarget(targetRow: TargetRow, monthIndex: number, daysInWeek: number, currentDayWorked: number): number {
+export function calculateYtdTarget(targetRow: TargetRow, monthIndex: number, daysInMonth: number, currentDayWorked: number): number {
   const completedMonthsTarget = targetRow.monthlyTargets
     .slice(0, monthIndex)
     .reduce((sum, value) => sum + value, 0);
 
-  return completedMonthsTarget + calculateMtdTarget(targetRow, monthIndex, daysInWeek, currentDayWorked);
+  return completedMonthsTarget + calculateMtdTarget(targetRow, monthIndex, daysInMonth, currentDayWorked);
 }
 
 function normalizeDateRange(
@@ -313,3 +299,5 @@ function startOfDay(date: Date): Date {
 function endOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 }
+
+

@@ -55,8 +55,10 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const availableBrands = useMemo(() => {
-    return Array.from(targets.keys()).sort((a, b) => a.localeCompare(b));
-  }, [targets]);
+    const targetBrands = new Set(targets.keys());
+    const salesBrands = new Set([...sales2026, ...sales2025].map(sale => sale.description));
+    return Array.from(new Set([...targetBrands, ...salesBrands])).sort((a, b) => a.localeCompare(b));
+  }, [targets, sales2026, sales2025]);
 
   const relevantSales2026 = useMemo(() => {
     if (!targets.size) {
@@ -478,3 +480,4 @@ function mapSalesToTargetBrands(
 }
 
 export default App;
+

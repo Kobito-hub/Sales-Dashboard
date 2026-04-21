@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import type { SalesRow, TargetRow } from '../types';
 
 const MONTH_HEADERS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const FULL_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 const SHORT_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 export const parseTargetFile = (file: File): Promise<Map<string, TargetRow>> => {
@@ -17,13 +18,15 @@ export const parseTargetFile = (file: File): Promise<Map<string, TargetRow>> => 
         const headerRowIndex = findTargetHeaderRowIndex(json);
 
         if (headerRowIndex === -1) {
-          throw new Error('Target sheet must include a SAP Product Name or Description column.');
+          throw new Error('Target sheet must include a "Standard Cases" section with SAP Product Name column and month headers (Jan-Dec).');
         }
 
-        const headers = (json[headerRowIndex] ?? []).map((cell) => normalizeText(cell));
-        const descIndex = headers.findIndex(
-          (header) => header.includes('product') || header.includes('description'),
-        );
+        // Find the description column index from the product name row
+        const descIndex = findProductNameColumnIndex(json, headerRowIndex);
+        if (descIndex === -1) {
+          throw new Error('Target sheet must include a SAP Product Name column.');
+        }
+
         const monthIndices = getTargetMonthIndices(sheet, json, headerRowIndex);
 
         if (monthIndices.some((index) => index === -1)) {
@@ -114,10 +117,16 @@ export const parseSalesFile = (file: File): Promise<SalesRow[]> => {
             continue;
           }
 
+          const casesSold = toNumber(row[casesIndex]);
+
+          if (casesSold <= 0) {
+            continue;
+          }
+
           sales.push({
             description,
             date,
-            casesSold: toNumber(row[casesIndex]),
+            casesSold,
           });
         }
 
@@ -197,15 +206,47 @@ export function getComparableSkuKey(value: unknown): string {
 }
 
 function findTargetHeaderRowIndex(rows: unknown[][]): number {
-  return rows.findIndex((row) => {
+  // First, find the row with "Standard Cases" to identify the correct table
+  const standardCasesRowIndex = rows.findIndex((row) => {
     const normalizedRow = row.map((cell) => normalizeText(cell));
-    const hasDescription = normalizedRow.some(
-      (cell) => cell.includes('sap product name') || cell.includes('product') || cell.includes('description'),
-    );
-    const monthMatches = MONTH_HEADERS.filter((month) => normalizedRow.includes(month)).length;
-
-    return hasDescription && monthMatches >= 6;
+    return normalizedRow.some((cell) => cell === 'standard cases' || cell.includes('standard') && cell.includes('cases'));
   });
+
+  if (standardCasesRowIndex === -1) {
+    return -1;
+  }
+
+  // Now look for the row with month headers starting from the Standard Cases row
+  for (let i = standardCasesRowIndex; i < Math.min(standardCasesRowIndex + 5, rows.length); i++) {
+    const normalizedRow = rows[i].map((cell) => normalizeText(cell));
+    const monthMatches = MONTH_HEADERS.filter((month) => normalizedRow.includes(month)).length;
+    
+    if (monthMatches >= 6) {
+      return i; // Return the row with the month headers (within the Standard Cases section)
+    }
+  }
+
+  return -1;
+}
+
+function findProductNameColumnIndex(rows: unknown[][], headerRowIndex: number): number {
+  // Look up from the header row (and a few rows before) to find the product name column
+  // within the Standard Cases section
+  for (let i = Math.max(0, headerRowIndex - 5); i <= headerRowIndex; i++) {
+    const row = rows[i] ?? [];
+    const columnIndex = row.findIndex((cell) => {
+      const normalized = normalizeText(cell);
+      return normalized.includes('sap product name') || 
+             (normalized.includes('product') && normalized.includes('name')) ||
+             normalized === 'sap product name';
+    });
+    
+    if (columnIndex !== -1) {
+      return columnIndex;
+    }
+  }
+
+  return -1;
 }
 
 function findSalesHeaderRowIndex(rows: unknown[][]): number {
@@ -227,11 +268,14 @@ function getTargetMonthIndices(
 ): number[] {
   const headerRow = rows[headerRowIndex] ?? [];
 
-  return MONTH_HEADERS.map((month) => {
+  return MONTH_HEADERS.map((month, monthIndex) => {
     const candidateColumns: number[] = [];
 
     headerRow.forEach((cell, columnIndex) => {
-      if (normalizeText(cell) === month) {
+      const normalizedCell = normalizeText(cell);
+      if (normalizedCell === month ||
+        normalizedCell === FULL_MONTHS[monthIndex] ||
+        normalizedCell === SHORT_MONTHS[monthIndex]) {
         candidateColumns.push(columnIndex);
       }
     });
@@ -262,9 +306,10 @@ function columnBelongsToStandardCases(
   const combined = headerContext.join(' ');
 
   return (
-    combined.includes('standard cases') &&
-    !combined.includes('naira') &&
-    !combined.includes('absolute cases')
+    combined.includes('standard') ||
+    combined.includes('cases') ||
+    combined.includes('target') ||
+    (!combined.includes('naira') && !combined.includes('absolute'))
   );
 }
 
