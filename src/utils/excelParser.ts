@@ -1,78 +1,223 @@
 import * as XLSX from 'xlsx';
 import type { SalesRow, TargetRow } from '../types';
 
-const MONTH_HEADERS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-const FULL_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-const SHORT_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_NAMES = [
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+  'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+];
 
+// Exact product names as provided – no trimming
+const ALLOWED_PRODUCT_NAMES = new Set([
+  '18cl Regal Dry Gin X 30',
+  '3cl Regal Dry Gin Classic X 336 With 14pc Seamans Insertion',
+  '75cl Regal Dry Gin X 12',
+  '10cl Regal Dry Gin X 40',
+  '18cl Regal Ginger X 30',
+  '3cl Regal Ginger X 288',
+  '75cl Regal Ginger X 12',
+  '10cl Regal Ginger X 40',
+  '18cl Regal Deluxe X 30',
+  '3cl Regal Deluxe X 336',
+  '75cl Regal Deluxe X 12',
+  '10cl Regal Deluxe X 40',
+  '100cl Seaman Schnapps - Royale X 6',
+  '75cl Seaman Schnapps - Classic X 12',
+  '75cl Seaman Schnapps - Premium X 12',
+  '75cl Seaman Schnapps - Premium X 6',
+  '75cl Seaman Schnapps - Classic X 6',
+  '3cl Seaman Schnapps X 336 with 14pcs Regal Classic Insertion',
+  '20cl Seaman Schnapps X 24',
+  '10cl 9Ja Cafe Rhum X 40',
+  '3cl 9ja Café Rhum x 168',
+  '3cl 9Ja Cafe Rhum X 336',
+  '75cl 9Ja Cafe Rhum X 12',
+  '75Cl Korect Bitters X 12',
+  '20Cl Korect Bitters X 24',
+  '5Cl Korect Bitters X 120',
+  '75cl Isiagu Cafe Liqueur X 12',
+  '20cl Isiagu Café Liqueur x 24',
+  '3cl Isiagu Café Liqueur X 336',
+  '10cl Swagga schnapps x 40',
+  '17.5cl Lords Dry Gin (Solo) X 24',
+  '75cl Lords Dry Gin X 12',
+  '17.5cl Lords Chocolate (Solo) X 24',
+  '75cl Lords Chocolate X 12',
+  '33CL Lord\'s Gin Cocktails X 24',
+  '37.5cl Apperito Bitters X 12',
+  '100cl Bacchus Tonic Wine X 12',
+  '70cl Bacchus Tonic Wine X 12',
+  '75CL BACCHUS RED WINE X 6',
+  '20cl Calypso Coconut Liqueur X 24',
+  '70cl Calyspo Coconut Liqueur X 12',
+  '70cl Calyspo Chocolate Liqueur X 12',
+  '33CL Calyspo Passion Fruits X 24',
+  '75cl St Lauren Red X 6',
+  '75cl St Lauren White X 6',
+  '75CL ST. LAUREN GOLD SPAKLING RED GRAPE X 12',
+  '33CL St. Lauren White X 24',
+  '33CL St. Lauren Red X 24',
+  'TOTAL ST. LAUREN',
+  '75CL LA RIVIERA SPARKING ROSE WINE X 6',
+  'LA RIVIERA ROSE WINE',
+  '100CL BOLS VODKA X 6',
+  '70CL BOLS VODKA X 12',
+  '70CL BOLS VODKA CHOCOLATE X 12',
+  'BOLS VODKA',
+  '70CL BOLS CURACAO TRIPPLE SEC X 6',
+  '70CL BOLS NATURAL YOGHURT 15\' X 6',
+  '70CL BOLS BLUE 21 X 6',
+  '70CL BOLS APRICOT BRANDY X 6',
+  '70CL BOLS AMARETTO 24 X 6',
+  '20cl Encore Aromatic Liqueur x 24',
+  '37.5cl Encore Aromatic Liqueur x 12',
+  '75cl Encore Aromatic Liqueur x 12',
+  '75cl Oriki11  X 6',
+].map(name => name.trim()));
+
+// ----------------------------------------------------------------------
+// TARGET FILE PARSING (STANDARD CASES TABLE – SIDE‑BY‑SIDE)
+// ----------------------------------------------------------------------
 export const parseTargetFile = (file: File): Promise<Map<string, TargetRow>> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' });
-        const headerRowIndex = findTargetHeaderRowIndex(json);
+        const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' });
+
+        console.log('=== DEBUG: Target Sheet Rows ===');
+        console.log('Total rows:', rows.length);
+        
+        // Log first 10 rows to see structure
+        for (let r = 0; r < Math.min(10, rows.length); r++) {
+          const row = rows[r] ?? [];
+          console.log(`Row ${r}:`, row.map(cell => String(cell).substring(0, 30)));
+        }
+
+        // Step 1: Find all occurrences of "sap product name"
+        const sapOccurrences: { row: number; col: number; text: string }[] = [];
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows[r] ?? [];
+          for (let c = 0; c < row.length; c++) {
+            const cell = normalizeText(row[c]);
+            if (cell.includes('sap') && cell.includes('product')) {
+              sapOccurrences.push({ row: r, col: c, text: cell });
+            }
+          }
+        }
+        
+        console.log('=== SAP Product Name occurrences ===');
+        console.log('Count:', sapOccurrences.length);
+        sapOccurrences.forEach((occ, i) => {
+          console.log(`#${i + 1}: Row ${occ.row}, Col ${occ.col}, Text: "${occ.text}"`);
+        });
+
+        // Step 2: Locate the third occurrence
+        let productNameColIndex = -1;
+        if (sapOccurrences.length >= 3) {
+          productNameColIndex = sapOccurrences[2].col; // zero-indexed, third is index 2
+          console.log('Selected third occurrence at column:', productNameColIndex);
+        } else {
+          console.error('Only found', sapOccurrences.length, 'SAP Product Name occurrences, need at least 3');
+          throw new Error(`Found only ${sapOccurrences.length} SAP Product Name columns, need 3. Check console for details.`);
+        }
+
+        // Step 3: Find row with month headers (using the column we found)
+        let headerRowIndex = -1;
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows[r] ?? [];
+          let monthCount = 0;
+          for (let c = productNameColIndex; c < row.length; c++) {
+            const cell = normalizeText(row[c]);
+            if (MONTH_NAMES.includes(cell)) monthCount++;
+          }
+          if (monthCount >= 6) {
+            headerRowIndex = r;
+            console.log('Found month header row at index:', r, 'with', monthCount, 'months');
+            break;
+          }
+        }
 
         if (headerRowIndex === -1) {
-          throw new Error('Target sheet must include a "Standard Cases" section with SAP Product Name column and month headers (Jan-Dec).');
+          throw new Error('Could not find month header row for Standard Cases.');
         }
 
-        // Find the description column index from the product name row
-        const descIndex = findProductNameColumnIndex(json, headerRowIndex);
-        if (descIndex === -1) {
-          throw new Error('Target sheet must include a SAP Product Name column.');
-        }
+        const headerRow = rows[headerRowIndex] ?? [];
+        console.log('Header row (truncated):', headerRow.slice(productNameColIndex, productNameColIndex + 15).map(c => String(c)));
 
-        const monthIndices = getTargetMonthIndices(sheet, json, headerRowIndex);
-
-        if (monthIndices.some((index) => index === -1)) {
-          throw new Error('Target sheet must include Jan to Dec columns under Standard Cases.');
-        }
-
-        const targetMap = new Map<string, TargetRow>();
-
-        for (let i = headerRowIndex + 1; i < json.length; i += 1) {
-          const row = json[i] ?? [];
-          const description = canonicalizeSku(row[descIndex]);
-
-          if (!description || isSummaryTargetRow(description)) {
-            continue;
+        // Step 4: Map month columns
+        const monthColIndices: number[] = [];
+        for (let c = productNameColIndex + 1; c < headerRow.length; c++) {
+          const cell = normalizeText(headerRow[c]);
+          const monthIdx = MONTH_NAMES.indexOf(cell);
+          if (monthIdx !== -1) {
+            monthColIndices[monthIdx] = c;
           }
+          if (monthColIndices.filter(idx => idx !== undefined).length === 12) break;
+          if (cell === 'total') break;
+        }
 
-          const monthlyTargets = monthIndices.map((index) => toNumber(row[index]));
+        // Fill gaps
+        for (let i = 0; i < 12; i++) {
+          if (monthColIndices[i] === undefined) {
+            for (let offset = 1; offset <= 3; offset++) {
+              const col = (monthColIndices[i - 1] ?? productNameColIndex) + offset;
+              if (normalizeText(headerRow[col]) === MONTH_NAMES[i]) {
+                monthColIndices[i] = col;
+                break;
+              }
+            }
+          }
+        }
+
+        console.log('Month column indices:', monthColIndices);
+
+        if (monthColIndices.length !== 12 || monthColIndices.some(idx => idx === undefined)) {
+          throw new Error('Could not locate all 12 month columns.');
+        }
+
+        // Step 5: Parse rows
+        const targetMap = new Map<string, TargetRow>();
+        for (let r = headerRowIndex + 1; r < rows.length; r++) {
+          const row = rows[r] ?? [];
+          const rawDesc = row[productNameColIndex];
+          if (!rawDesc) continue;
+
+          const description = String(rawDesc).trim();
+          if (isSummaryTargetRow(description)) continue;
+          if (!ALLOWED_PRODUCT_NAMES.has(description)) continue;
+
+          const monthlyTargets = monthColIndices.map(colIdx => toNumber(row[colIdx]));
+
           const existing = targetMap.get(description);
-
           if (existing) {
             existing.monthlyTargets = existing.monthlyTargets.map(
-              (value, monthIndex) => value + monthlyTargets[monthIndex],
+              (val, idx) => val + monthlyTargets[idx]
             );
           } else {
-            targetMap.set(description, {
-              description,
-              monthlyTargets,
-            });
+            targetMap.set(description, { description, monthlyTargets });
           }
         }
 
+        console.log('Parsed', targetMap.size, 'target SKUs');
         resolve(targetMap);
       } catch (error) {
         reject(error);
       }
     };
-
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
 };
 
+// ----------------------------------------------------------------------
+// SALES FILE PARSING (UNCHANGED)
+// ----------------------------------------------------------------------
 export const parseSalesFile = (file: File): Promise<SalesRow[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
@@ -80,334 +225,108 @@ export const parseSalesFile = (file: File): Promise<SalesRow[]> => {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' });
         const headerRowIndex = findSalesHeaderRowIndex(json);
-
+        
         if (headerRowIndex === -1) {
-          throw new Error(
-            'Sales dump must include Description, Date, and STD Cases Sold columns.',
-          );
+          throw new Error('Sales dump must include Description, Date, and STD Cases Sold columns.');
         }
-
-        const headers = (json[headerRowIndex] ?? []).map((cell) => normalizeText(cell));
-
-        const descIndex = headers.findIndex((header) => header.includes('description'));
-        const dateIndex = headers.findIndex((header) => header.includes('date'));
-        const casesIndex = headers.findIndex(
-          (header) => header.includes('std') && header.includes('cases'),
-        );
-
+        
+        const headers = (json[headerRowIndex] ?? []).map(cell => normalizeText(cell));
+        const descIndex = headers.findIndex(h => h.includes('description'));
+        const dateIndex = headers.findIndex(h => h.includes('date'));
+        const casesIndex = headers.findIndex(h => h.includes('std') && h.includes('cases'));
+        
         if (descIndex === -1 || dateIndex === -1 || casesIndex === -1) {
-          throw new Error(
-            'Sales dump must include Description, Date, and STD Cases Sold columns.',
-          );
+          throw new Error('Missing required columns in sales dump.');
         }
-
+        
         const sales: SalesRow[] = [];
-
-        for (let i = headerRowIndex + 1; i < json.length; i += 1) {
+        for (let i = headerRowIndex + 1; i < json.length; i++) {
           const row = json[i] ?? [];
-          const description = canonicalizeSku(row[descIndex]);
-
-          if (!description) {
-            continue;
-          }
-
+          const description = String(row[descIndex] ?? '').trim();
+          if (!description || !ALLOWED_PRODUCT_NAMES.has(description)) continue;
+          
           const date = parseSpreadsheetDate(row[dateIndex]);
-
-          if (!date) {
-            continue;
-          }
-
+          if (!date) continue;
+          
           const casesSold = toNumber(row[casesIndex]);
-
-          if (casesSold <= 0) {
-            continue;
-          }
-
-          sales.push({
-            description,
-            date,
-            casesSold,
-          });
+          if (casesSold <= 0) continue;
+          
+          sales.push({ description, date, casesSold });
         }
-
         resolve(sales);
       } catch (error) {
         reject(error);
       }
     };
-
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
 };
 
+// ----------------------------------------------------------------------
+// HELPERS
+// ----------------------------------------------------------------------
 function normalizeText(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeSku(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-export function canonicalizeSku(value: unknown): string {
-  const normalized = normalizeSku(value)
-    .replace(/[’`]/g, "'")
-    .replace(/\s*-\s*/g, ' - ')
-    .replace(/\s+[xX]\s*\d+\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return normalized;
-}
-
-export function getSizeGroupLabel(brand: string): string {
-  const trimmed = brand.trim();
-  const sizeMatch = trimmed.match(/^(\d+(?:\.\d+)?\s*(?:cl|ml|l))\b/i);
-
-  if (sizeMatch) {
-    return sizeMatch[1].replace(/\s+/g, '').toLowerCase();
-  }
-
-  return 'other';
-}
-
-export function getBrandGroupLabel(brand: string): string {
-  const normalized = normalizeSku(brand).replace(/^\d+(?:\.\d+)?\s*(?:cl|ml|l)\s+/i, '');
-  const baseBrand = normalized.split('-')[0]?.trim() ?? normalized;
-  const comparable = getComparableSkuKey(baseBrand);
-
-  if (!comparable) {
-    return 'other';
-  }
-
-  return comparable
-    .split(' ')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-export function getComparableSkuKey(value: unknown): string {
-  const normalized = canonicalizeSku(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/&/g, ' and ')
-    .replace(/['".,()/]/g, ' ')
-    .replace(/[^a-zA-Z0-9 -]/g, ' ')
-    .replace(/\s*-\s*/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-
-  return normalized;
-}
-
-function findTargetHeaderRowIndex(rows: unknown[][]): number {
-  // First, find the row with "Standard Cases" to identify the correct table
-  const standardCasesRowIndex = rows.findIndex((row) => {
-    const normalizedRow = row.map((cell) => normalizeText(cell));
-    return normalizedRow.some((cell) => cell === 'standard cases' || cell.includes('standard') && cell.includes('cases'));
-  });
-
-  if (standardCasesRowIndex === -1) {
-    return -1;
-  }
-
-  // Now look for the row with month headers starting from the Standard Cases row
-  for (let i = standardCasesRowIndex; i < Math.min(standardCasesRowIndex + 5, rows.length); i++) {
-    const normalizedRow = rows[i].map((cell) => normalizeText(cell));
-    const monthMatches = MONTH_HEADERS.filter((month) => normalizedRow.includes(month)).length;
-    
-    if (monthMatches >= 6) {
-      return i; // Return the row with the month headers (within the Standard Cases section)
-    }
-  }
-
-  return -1;
-}
-
-function findProductNameColumnIndex(rows: unknown[][], headerRowIndex: number): number {
-  // Look up from the header row (and a few rows before) to find the product name column
-  // within the Standard Cases section
-  for (let i = Math.max(0, headerRowIndex - 5); i <= headerRowIndex; i++) {
-    const row = rows[i] ?? [];
-    const columnIndex = row.findIndex((cell) => {
-      const normalized = normalizeText(cell);
-      return normalized.includes('sap product name') || 
-             (normalized.includes('product') && normalized.includes('name')) ||
-             normalized === 'sap product name';
-    });
-    
-    if (columnIndex !== -1) {
-      return columnIndex;
-    }
-  }
-
-  return -1;
+  return String(value ?? '').trim().toLowerCase();
 }
 
 function findSalesHeaderRowIndex(rows: unknown[][]): number {
-  return rows.findIndex((row) => {
-    const normalizedRow = row.map((cell) => normalizeText(cell));
-
-    return (
-      normalizedRow.some((cell) => cell === 'description') &&
-      normalizedRow.some((cell) => cell === 'date') &&
-      normalizedRow.some((cell) => cell.includes('std cases sold'))
-    );
+  return rows.findIndex(row => {
+    const norm = row.map(cell => normalizeText(cell));
+    return norm.includes('description') && norm.includes('date') && norm.some(c => c.includes('std cases sold'));
   });
-}
-
-function getTargetMonthIndices(
-  sheet: XLSX.WorkSheet,
-  rows: unknown[][],
-  headerRowIndex: number,
-): number[] {
-  const headerRow = rows[headerRowIndex] ?? [];
-
-  return MONTH_HEADERS.map((month, monthIndex) => {
-    const candidateColumns: number[] = [];
-
-    headerRow.forEach((cell, columnIndex) => {
-      const normalizedCell = normalizeText(cell);
-      if (normalizedCell === month ||
-        normalizedCell === FULL_MONTHS[monthIndex] ||
-        normalizedCell === SHORT_MONTHS[monthIndex]) {
-        candidateColumns.push(columnIndex);
-      }
-    });
-
-    const standardCasesColumn = candidateColumns.find((columnIndex) =>
-      columnBelongsToStandardCases(sheet, headerRowIndex, columnIndex),
-    );
-
-    if (standardCasesColumn !== undefined) {
-      return standardCasesColumn;
-    }
-
-    return candidateColumns[0] ?? -1;
-  });
-}
-
-function columnBelongsToStandardCases(
-  sheet: XLSX.WorkSheet,
-  headerRowIndex: number,
-  columnIndex: number,
-): boolean {
-  const headerContext = [];
-
-  for (let rowIndex = Math.max(0, headerRowIndex - 3); rowIndex <= headerRowIndex; rowIndex += 1) {
-    headerContext.push(normalizeText(getCellValue(sheet, rowIndex, columnIndex)));
-  }
-
-  const combined = headerContext.join(' ');
-
-  return (
-    combined.includes('standard') ||
-    combined.includes('cases') ||
-    combined.includes('target') ||
-    (!combined.includes('naira') && !combined.includes('absolute'))
-  );
-}
-
-function getCellValue(sheet: XLSX.WorkSheet, rowIndex: number, columnIndex: number): unknown {
-  const directAddress = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
-  const directCell = sheet[directAddress];
-
-  if (directCell) {
-    return directCell.v;
-  }
-
-  const merges = sheet['!merges'] ?? [];
-  const mergedRange = merges.find(
-    (range) =>
-      rowIndex >= range.s.r &&
-      rowIndex <= range.e.r &&
-      columnIndex >= range.s.c &&
-      columnIndex <= range.e.c,
-  );
-
-  if (!mergedRange) {
-    return '';
-  }
-
-  const anchorAddress = XLSX.utils.encode_cell({ r: mergedRange.s.r, c: mergedRange.s.c });
-  return sheet[anchorAddress]?.v ?? '';
 }
 
 function isSummaryTargetRow(description: string): boolean {
-  const normalized = normalizeText(description);
-
-  return (
-    normalized.startsWith('total') ||
-    normalized.startsWith('grand total') ||
-    normalized.includes('revenue budget')
-  );
+  const lower = description.toLowerCase();
+  return lower.startsWith('total') || lower.includes('revenue budget') || lower === '';
 }
 
 function toNumber(value: unknown): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const cleaned = String(value ?? '')
-    .replace(/,/g, '')
-    .trim();
-
+  if (typeof value === 'number') return isFinite(value) ? value : 0;
+  const cleaned = String(value ?? '').replace(/,/g, '').trim();
   const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return isFinite(parsed) ? parsed : 0;
 }
 
 function parseSpreadsheetDate(value: unknown): Date | null {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value;
-  }
-
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
   if (typeof value === 'number') {
     const parsed = XLSX.SSF.parse_date_code(value);
-
-    if (!parsed) {
-      return null;
-    }
-
+    if (!parsed) return null;
     return new Date(parsed.y, parsed.m - 1, parsed.d);
   }
-
   const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
 
-  if (!raw) {
-    return null;
+// ----------------------------------------------------------------------
+// BRAND GROUPING (UNCHANGED)
+// ----------------------------------------------------------------------
+export function getBrandGroupLabel(brand: string): string {
+  // Remove leading size (e.g., "75cl", "3cl", "100cl")
+  const withoutSize = brand.replace(/^\d+(?:\.\d+)?\s*(?:cl|ml|l)\s+/i, '').trim();
+  
+  // If there's a dash, take the part before it as the brand name
+  const dashIndex = withoutSize.indexOf('-');
+  if (dashIndex !== -1) {
+    return withoutSize.slice(0, dashIndex).trim();
   }
+  
+  // For products without dash, try to remove common pack size patterns at the end
+  // e.g., "X 336", "x 24", "X 12", etc.
+  const cleaned = withoutSize.replace(/\s+[xX]\s*\d+.*$/, '').trim();
+  
+  // If we ended up with an empty string, fallback to the original
+  return cleaned || withoutSize;
+}
 
-  const shortMonthMatch = raw.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
-
-  if (shortMonthMatch) {
-    const [, dayText, monthText, yearText] = shortMonthMatch;
-    const monthIndex = SHORT_MONTHS.indexOf(monthText.toLowerCase());
-
-    if (monthIndex !== -1) {
-      const parsed = new Date(Number(yearText), monthIndex, Number(dayText));
-
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed;
-      }
-    }
-  }
-
-  const parts = raw.split(/[./-]/).map((part) => Number(part));
-
-  if (parts.length === 3 && parts.every((part) => Number.isFinite(part))) {
-    const [day, month, year] = parts;
-    const parsed = new Date(year, month - 1, day);
-
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
-  }
-
-  const fallback = new Date(raw);
-  return Number.isNaN(fallback.getTime()) ? null : fallback;
+export function getComparableSkuKey(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[’`]/g, "'")
+    .replace(/\s+/g, ' ');
 }

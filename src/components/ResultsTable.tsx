@@ -170,7 +170,7 @@ function getCellStyle(outlineColor: string, backgroundColor?: string) {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-NG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(value));
 }

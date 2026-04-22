@@ -97,21 +97,25 @@ export function buildPeriodTableRows(params: {
     ? aggregateSalesBetweenDates(sales2025, yearRange2025.start, yearRange2025.end)
     : new Map<string, number>();
 
-  const intermediateRows = brands.map((brand) => {    const targetRow = targets.get(brand);    let fy26Target = 0;    let fy26Act = 0;    let fy25Act = 0;
+  const intermediateRows = brands.map((brand) => {
+    const targetRow = targets.get(brand);
+    let fy26Target = 0;
+    let fy26Act = 0;
+    let fy25Act = 0;
 
-      if (period === 'wtd') {
-        fy26Target = targetRow ? calculateSelectedMonthTarget(targetRow, selectedMonth, clampedMonthDays, clampedWeekDays) : 0;
-        fy26Act = sales2026Wtd.get(brand) ?? 0;
-        fy25Act = sales2025Wtd.get(brand) ?? 0;
-      } else if (period === 'mtd') {
-        fy26Target = targetRow ? calculateMtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
-        fy26Act = sales2026Mtd.get(brand) ?? 0;
-        fy25Act = sales2025Mtd.get(brand) ?? 0;
-      } else {
-        fy26Target = targetRow ? calculateYtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
-        fy26Act = sales2026Ytd.get(brand) ?? 0;
-        fy25Act = sales2025Ytd.get(brand) ?? 0;
-      }
+    if (period === 'wtd') {
+      fy26Target = targetRow ? calculateSelectedMonthTarget(targetRow, selectedMonth, clampedMonthDays, clampedWeekDays) : 0;
+      fy26Act = sales2026Wtd.get(brand) ?? 0;
+      fy25Act = sales2025Wtd.get(brand) ?? 0;
+    } else if (period === 'mtd') {
+      fy26Target = targetRow ? calculateMtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
+      fy26Act = sales2026Mtd.get(brand) ?? 0;
+      fy25Act = sales2025Mtd.get(brand) ?? 0;
+    } else {
+      fy26Target = targetRow ? calculateYtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
+      fy26Act = sales2026Ytd.get(brand) ?? 0;
+      fy25Act = sales2025Ytd.get(brand) ?? 0;
+    }
 
       return {
         sku: brand,
@@ -157,6 +161,7 @@ export function buildYtgRows(params: {
   actualYearStartDay: number;
   actualYearEndMonth: number;
   actualYearEndDay: number;
+  groupToProducts: Map<string, string[]>;
 }): { rows: YtgRow[]; total: YtgRow | null } {
   const {
     brands,
@@ -166,6 +171,7 @@ export function buildYtgRows(params: {
     actualYearStartDay,
     actualYearEndMonth,
     actualYearEndDay,
+    groupToProducts,
   } = params;
   const yearRange2026 = normalizeDateRange(
     actualYearStartMonth,
@@ -180,14 +186,15 @@ export function buildYtgRows(params: {
 
   const rows: YtgRow[] = brands
     .map((brand) => {
-      const targetRow = targets.get(brand);
+      const products = groupToProducts.get(brand) || [];
+      const targetRow = products.map(p => targets.get(p)).find(t => t);
 
       if (!targetRow) {
         return null;
       }
 
       const target2026 = targetRow.monthlyTargets.reduce((sum, value) => sum + value, 0);
-      const ytdActual = sales2026Ytd.get(brand) ?? 0;
+      const ytdActual = products.reduce((sum, p) => sum + (sales2026Ytd.get(p) ?? 0), 0);
 
       return {
         sku: brand,
