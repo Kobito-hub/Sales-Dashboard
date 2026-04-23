@@ -19,6 +19,7 @@ export interface TableRow {
   sku: string;
   fy26Target: number;
   fy26Act: number;
+  fy25Act: number;
   contributionPercent: number; // Act / total actual * 100
   actVsTarget: number; // (Act / Tgt) * 100
   vs25: number; // (Act2026 / Act2025 - 1)*100

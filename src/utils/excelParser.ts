@@ -77,6 +77,14 @@ const ALLOWED_PRODUCT_NAMES = new Set([
 // ----------------------------------------------------------------------
 // TARGET FILE PARSING (STANDARD CASES TABLE – SIDE‑BY‑SIDE)
 // ----------------------------------------------------------------------
+export function getBaseSkuKey(sku: string): string {
+  // Remove leading size and extract the core product identifier
+  // Example: "75cl Seaman Schnapps - Premium X 12" -> "75cl Seaman Schnapps - Premium"
+  const withoutSize = sku.trim();
+  // Remove trailing pack size pattern like " X 12", " X 6", " X 336", etc.
+  const baseKey = withoutSize.replace(/\s+[xX]\s*\d+.*$/, '').trim();
+  return baseKey;
+}
 export const parseTargetFile = (file: File): Promise<Map<string, TargetRow>> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -305,24 +313,94 @@ function parseSpreadsheetDate(value: unknown): Date | null {
 // ----------------------------------------------------------------------
 // BRAND GROUPING (UNCHANGED)
 // ----------------------------------------------------------------------
-export function getBrandGroupLabel(brand: string): string {
-  // Remove leading size (e.g., "75cl", "3cl", "100cl")
-  const withoutSize = brand.replace(/^\d+(?:\.\d+)?\s*(?:cl|ml|l)\s+/i, '').trim();
-  
-  // If there's a dash, take the part before it as the brand name
-  const dashIndex = withoutSize.indexOf('-');
-  if (dashIndex !== -1) {
-    return withoutSize.slice(0, dashIndex).trim();
-  }
-  
-  // For products without dash, try to remove common pack size patterns at the end
-  // e.g., "X 336", "x 24", "X 12", etc.
-  const cleaned = withoutSize.replace(/\s+[xX]\s*\d+.*$/, '').trim();
-  
-  // If we ended up with an empty string, fallback to the original
-  return cleaned || withoutSize;
-}
+const BRAND_GROUP_MAP: Record<string, string> = {
+  // 9ja Cafe Rhum
+  "10cl 9Ja Cafe Rhum X 40": "9ja Cafe Rhum",
+  "3cl 9ja Café Rhum x 168": "9ja Cafe Rhum",
+  "3cl 9Ja Cafe Rhum X 336": "9ja Cafe Rhum",
+  "75cl 9Ja Cafe Rhum X 12": "9ja Cafe Rhum",
+  // Apperito Bitters
+  "37.5cl Apperito Bitters X 12": "Apperito Bitters",
+  // Bacchus
+  "100cl Bacchus Tonic Wine X 12": "Bacchus",
+  "70cl Bacchus Tonic Wine X 12": "Bacchus",
+  "75CL BACCHUS RED WINE X 6": "Bacchus",
+  // Bols
+  "100CL BOLS VODKA X 6": "Bols",
+  "70CL BOLS VODKA X 12": "Bols",
+  "70CL BOLS VODKA CHOCOLATE X 12": "Bols",
+  "70CL BOLS CURACAO TRIPPLE SEC X 6": "Bols",
+  "70CL BOLS NATURAL YOGHURT 15' X 6": "Bols",
+  "70CL BOLS BLUE 21 X 6": "Bols",
+  "70CL BOLS APRICOT BRANDY X 6": "Bols",
+  "70CL BOLS AMARETTO 24 X 6": "Bols",
+  // Calypso
+  "20cl Calypso Coconut Liqueur X 24": "Calypso",
+  "70cl Calyspo Coconut Liqueur X 12": "Calypso",
+  "70cl Calyspo Chocolate Liqueur X 12": "Calypso",
+  "33CL Calyspo Passion Fruits X 24": "Calypso",
+  // Encore Aromatic Liqueur
+  "20cl Encore Aromatic Liqueur x 24": "Encore Aromatic Liqueur",
+  "37.5cl Encore Aromatic Liqueur x 12": "Encore Aromatic Liqueur",
+  "75cl Encore Aromatic Liqueur x 12": "Encore Aromatic Liqueur",
+  // Isiagu Cafe Liqueur
+  "75cl Isiagu Cafe Liqueur X 12": "Isiagu Cafe Liqueur",
+  "20cl Isiagu Café Liqueur x 24": "Isiagu Cafe Liqueur",
+  "3cl Isiagu Café Liqueur X 336": "Isiagu Cafe Liqueur",
+  // Korect Bitters
+  "75Cl Korect Bitters X 12": "Korect Bitters",
+  "20Cl Korect Bitters X 24": "Korect Bitters",
+  "5Cl Korect Bitters X 120": "Korect Bitters",
+  // LA RIVIERA
+  "75CL LA RIVIERA SPARKING ROSE WINE X 6": "LA RIVIERA SPARKING ROSE WINE",
+  // Lords
+  "17.5cl Lords Dry Gin (Solo) X 24": "Lords",
+  "75cl Lords Dry Gin X 12": "Lords",
+  "17.5cl Lords Chocolate (Solo) X 24": "Lords",
+  "75cl Lords Chocolate X 12": "Lords",
+  "33CL Lord's Gin Cocktails X 24": "Lords",
+  // Oriki11
+  "75cl Oriki11  X 6": "Oriki11",
+  // Regal Deluxe
+  "18cl Regal Deluxe X 30": "Regal Deluxe",
+  "3cl Regal Deluxe X 336": "Regal Deluxe",
+  "75cl Regal Deluxe X 12": "Regal Deluxe",
+  "10cl Regal Deluxe X 40": "Regal Deluxe",
+  // Regal Dry Gin
+  "18cl Regal Dry Gin X 30": "Regal Dry Gin",
+  "3cl Regal Dry Gin Classic X 336 With 14pc Seamans Insertion": "Regal Dry Gin",
+  "75cl Regal Dry Gin X 12": "Regal Dry Gin",
+  "10cl Regal Dry Gin X 40": "Regal Dry Gin",
+  // Regal Ginger
+  "18cl Regal Ginger X 30": "Regal Ginger",
+  "3cl Regal Ginger X 288": "Regal Ginger",
+  "75cl Regal Ginger X 12": "Regal Ginger",
+  "10cl Regal Ginger X 40": "Regal Ginger",
+  // Seaman Schnapps
+  "100cl Seaman Schnapps - Royale X 6": "Seaman Schnapps",
+  "75cl Seaman Schnapps - Classic X 12": "Seaman Schnapps",
+  "75cl Seaman Schnapps - Premium X 12": "Seaman Schnapps",
+  "75cl Seaman Schnapps - Premium X 6": "Seaman Schnapps",
+  "75cl Seaman Schnapps - Classic X 6": "Seaman Schnapps",
+  "3cl Seaman Schnapps X 336 with 14pcs Regal Classic Insertion": "Seaman Schnapps",
+  "20cl Seaman Schnapps X 24": "Seaman Schnapps",
+  // St Lauren
+  "75cl St Lauren Red X 6": "St Lauren",
+  "75cl St Lauren White X 6": "St Lauren",
+  "75CL ST. LAUREN GOLD SPAKLING RED GRAPE X 12": "St Lauren",
+  "33CL St. Lauren White X 24": "St Lauren",
+  "33CL St. Lauren Red X 24": "St Lauren",
+  // Swagga schnapps
+  "10cl Swagga schnapps x 40": "Swagga Schnapps",
+};
+/**
+ * Strips the trailing pack size (e.g., " X 12", " X 6", " X 336")
+ * to create a base key for merging variants with the same unit, name, and variant.
+ */
 
+export function getBrandGroupLabel(brand: string): string {
+  return BRAND_GROUP_MAP[brand] || brand;
+}
 export function getComparableSkuKey(value: unknown): string {
   return String(value ?? '')
     .trim()

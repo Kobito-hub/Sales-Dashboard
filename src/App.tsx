@@ -12,6 +12,7 @@ import { buildPeriodTableRows, buildYtgRows } from "./utils/calculations";
 import {
   getBrandGroupLabel,
   getComparableSkuKey,
+  getBaseSkuKey, // Add this
   parseSalesFile,
   parseTargetFile,
 } from "./utils/excelParser";
@@ -35,8 +36,6 @@ function extractUnitValue(sku: string): number {
 }
 
 function App() {
-  const today = new Date();
-
   const [targets, setTargets] = useState<Map<string, TargetRow>>(new Map());
   const [sales2026, setSales2026] = useState<SalesRow[]>([]);
   const [sales2025, setSales2025] = useState<SalesRow[]>([]);
@@ -84,7 +83,7 @@ function App() {
 
   const effectiveBrands = useMemo(() => {
     const base = selectedBrands.length > 0 ? selectedBrands : availableBrands;
-    return [...base].sort((a, b) => extractUnitValue(a) - extractUnitValue(b));
+    return [...base].sort((a, b) => extractUnitValue(b) - extractUnitValue(a));
   }, [availableBrands, selectedBrands]);
 
   const periodResults = useMemo(() => {
@@ -151,7 +150,66 @@ function App() {
   ]);
 
   const activeResults = periodResults[activePeriod];
+  const mergedActiveResults = useMemo(() => {
+    const rows = activeResults.rows;
+    const mergedMap = new Map<
+      string,
+      {
+        sku: string;
+        fy26Target: number;
+        fy26Act: number;
+        fy25Act: number;
+      }
+    >();
 
+    rows.forEach((row) => {
+      const baseKey = getBaseSkuKey(row.sku);
+      const existing = mergedMap.get(baseKey);
+      if (existing) {
+        existing.fy26Target += row.fy26Target;
+        existing.fy26Act += row.fy26Act;
+        existing.fy25Act += row.fy25Act;
+      } else {
+        mergedMap.set(baseKey, {
+          sku: baseKey, // Display the base SKU (without pack size)
+          fy26Target: row.fy26Target,
+          fy26Act: row.fy26Act,
+          fy25Act: row.fy25Act,
+        });
+      }
+    });
+
+    // Convert to array and recalculate percentages
+    const mergedRows = Array.from(mergedMap.values());
+    const totalAct = mergedRows.reduce((sum, r) => sum + r.fy26Act, 0);
+    const totalTarget = mergedRows.reduce((sum, r) => sum + r.fy26Target, 0);
+    const total2025Act = mergedRows.reduce((sum, r) => sum + r.fy25Act, 0);
+
+    const finalRows = mergedRows.map((r) => ({
+      sku: r.sku,
+      fy26Target: r.fy26Target,
+      fy26Act: r.fy26Act,
+      fy25Act: r.fy25Act,
+      contributionPercent: totalAct > 0 ? (r.fy26Act / totalAct) * 100 : 0,
+      actVsTarget: r.fy26Target > 0 ? (r.fy26Act / r.fy26Target) * 100 : 0,
+      vs25: r.fy25Act > 0 ? (r.fy26Act / r.fy25Act - 1) * 100 : 0,
+    }));
+
+    const totals =
+      finalRows.length > 0
+        ? {
+            sku: "TOTAL",
+            fy26Target: totalTarget,
+            fy26Act: totalAct,
+            fy25Act: total2025Act,
+            contributionPercent: totalAct > 0 ? 100 : 0,
+            actVsTarget: totalTarget > 0 ? (totalAct / totalTarget) * 100 : 0,
+            vs25: total2025Act > 0 ? (totalAct / total2025Act - 1) * 100 : 0,
+          }
+        : null;
+
+    return { rows: finalRows, totals };
+  }, [activeResults]);
   const summary = useMemo(
     () => ({
       brandsShown: effectiveBrands.length,
@@ -165,7 +223,7 @@ function App() {
   const ytgData = useMemo(() => {
     const weekEnd = new Date(2026, actualWeekEndMonth, actualWeekEndDay);
     const sortedBrands = [...effectiveBrands].sort(
-      (a, b) => extractUnitValue(a) - extractUnitValue(b),
+      (a, b) => extractUnitValue(b) - extractUnitValue(a),
     );
     const groupToProducts = new Map<string, string[]>();
     sortedBrands.forEach((brand) => groupToProducts.set(brand, [brand]));
@@ -187,114 +245,165 @@ function App() {
     actualWeekEndMonth,
     actualWeekEndDay,
   ]);
+  const mergedYtgData = useMemo(() => {
+    const rows = ytgData.rows;
+    const mergedMap = new Map<
+      string,
+      {
+        sku: string;
+        target2026: number;
+        ytdActual: number;
+      }
+    >();
+
+    rows.forEach((row) => {
+      const baseKey = getBaseSkuKey(row.sku);
+      const existing = mergedMap.get(baseKey);
+      if (existing) {
+        existing.target2026 += row.target2026;
+        existing.ytdActual += row.ytdActual;
+      } else {
+        mergedMap.set(baseKey, {
+          sku: baseKey,
+          target2026: row.target2026,
+          ytdActual: row.ytdActual,
+        });
+      }
+    });
+
+    const mergedRows = Array.from(mergedMap.values()).map((r) => {
+      const ytdAchievedPercent =
+        r.target2026 > 0 ? (r.ytdActual / r.target2026) * 100 : 0;
+      const ytgBalance = r.target2026 - r.ytdActual;
+      return { ...r, ytdAchievedPercent, ytgBalance };
+    });
+
+    const totalTarget = mergedRows.reduce((sum, r) => sum + r.target2026, 0);
+    const totalYtdActual = mergedRows.reduce((sum, r) => sum + r.ytdActual, 0);
+    const totalBalance = mergedRows.reduce((sum, r) => sum + r.ytgBalance, 0);
+
+    const totals =
+      mergedRows.length > 0
+        ? {
+            sku: "TOTAL",
+            target2026: totalTarget,
+            ytdActual: totalYtdActual,
+            ytdAchievedPercent:
+              totalTarget > 0 ? (totalYtdActual / totalTarget) * 100 : 0,
+            ytgBalance: totalBalance,
+          }
+        : null;
+
+    return { rows: mergedRows, totals };
+  }, [ytgData]);
 
   // Comprehensive debug for all periods
-  const vs25Debug = useMemo(() => {
-    const periods = ["wtd", "mtd", "ytd"] as const;
-    const result: any = {};
+  // const vs25Debug = useMemo(() => {
+  //   const periods = ["wtd", "mtd", "ytd"] as const;
+  //   const result: any = {};
 
-    const weekEnd2026 = new Date(2026, actualWeekEndMonth, actualWeekEndDay);
-    const weekStart2026 = new Date(
-      2026,
-      actualWeekStartMonth,
-      actualWeekStartDay,
-    );
-    const mtdStart2026 = new Date(2026, selectedMonth, 1);
-    const ytdStart2026 = new Date(2026, 0, 1);
+  //   const weekEnd2026 = new Date(2026, actualWeekEndMonth, actualWeekEndDay);
+  //   const weekStart2026 = new Date(
+  //     2026,
+  //     actualWeekStartMonth,
+  //     actualWeekStartDay,
+  //   );
+  //   const mtdStart2026 = new Date(2026, selectedMonth, 1);
+  //   const ytdStart2026 = new Date(2026, 0, 1);
 
-    for (const period of periods) {
-      let start2026: Date, end2026: Date;
-      if (period === "wtd") {
-        start2026 = weekStart2026;
-        end2026 = weekEnd2026;
-      } else if (period === "mtd") {
-        start2026 = mtdStart2026;
-        end2026 = weekEnd2026;
-      } else {
-        start2026 = ytdStart2026;
-        end2026 = weekEnd2026;
-      }
+  //   for (const period of periods) {
+  //     let start2026: Date, end2026: Date;
+  //     if (period === "wtd") {
+  //       start2026 = weekStart2026;
+  //       end2026 = weekEnd2026;
+  //     } else if (period === "mtd") {
+  //       start2026 = mtdStart2026;
+  //       end2026 = weekEnd2026;
+  //     } else {
+  //       start2026 = ytdStart2026;
+  //       end2026 = weekEnd2026;
+  //     }
 
-      // Shift to 2025
-      const start2025 = new Date(
-        2025,
-        start2026.getMonth(),
-        start2026.getDate(),
-      );
-      const end2025 = new Date(2025, end2026.getMonth(), end2026.getDate());
+  //     // Shift to 2025
+  //     const start2025 = new Date(
+  //       2025,
+  //       start2026.getMonth(),
+  //       start2026.getDate(),
+  //     );
+  //     const end2025 = new Date(2025, end2026.getMonth(), end2026.getDate());
 
-      // Aggregate 2026
-      const act2026: Record<string, number> = {};
-      relevantSales2026.forEach((s) => {
-        if (s.date >= start2026 && s.date <= end2026) {
-          act2026[s.description] = (act2026[s.description] || 0) + s.casesSold;
-        }
-      });
+  //     // Aggregate 2026
+  //     const act2026: Record<string, number> = {};
+  //     relevantSales2026.forEach((s) => {
+  //       if (s.date >= start2026 && s.date <= end2026) {
+  //         act2026[s.description] = (act2026[s.description] || 0) + s.casesSold;
+  //       }
+  //     });
 
-      // Aggregate 2025 (with mapping)
-      const act2025: Record<string, number> = {};
-      relevantSales2025.forEach((s) => {
-        if (s.date >= start2025 && s.date <= end2025) {
-          act2025[s.description] = (act2025[s.description] || 0) + s.casesSold;
-        }
-      });
+  //     // Aggregate 2025 (with mapping)
+  //     const act2025: Record<string, number> = {};
+  //     relevantSales2025.forEach((s) => {
+  //       if (s.date >= start2025 && s.date <= end2025) {
+  //         act2025[s.description] = (act2025[s.description] || 0) + s.casesSold;
+  //       }
+  //     });
 
-      // Target for period
-      const tgt: Record<string, number> = {};
-      effectiveBrands.forEach((brand) => {
-        const targetRow = targets.get(brand);
-        if (!targetRow) return;
-        if (period === "wtd") {
-          tgt[brand] =
-            (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
-            targetDaysInWeek;
-        } else if (period === "mtd") {
-          tgt[brand] =
-            (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
-            currentDayWorked;
-        } else {
-          const completed = targetRow.monthlyTargets
-            .slice(0, selectedMonth)
-            .reduce((a, b) => a + b, 0);
-          tgt[brand] =
-            completed +
-            (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
-              currentDayWorked;
-        }
-      });
+  //     // Target for period
+  //     const tgt: Record<string, number> = {};
+  //     effectiveBrands.forEach((brand) => {
+  //       const targetRow = targets.get(brand);
+  //       if (!targetRow) return;
+  //       if (period === "wtd") {
+  //         tgt[brand] =
+  //           (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
+  //           targetDaysInWeek;
+  //       } else if (period === "mtd") {
+  //         tgt[brand] =
+  //           (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
+  //           currentDayWorked;
+  //       } else {
+  //         const completed = targetRow.monthlyTargets
+  //           .slice(0, selectedMonth)
+  //           .reduce((a, b) => a + b, 0);
+  //         tgt[brand] =
+  //           completed +
+  //           (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
+  //             currentDayWorked;
+  //       }
+  //     });
 
-      result[period] = {
-        ranges: {
-          "2026": `${start2026.toDateString()} – ${end2026.toDateString()}`,
-          "2025": `${start2025.toDateString()} – ${end2025.toDateString()}`,
-        },
-        bySku: effectiveBrands.map((brand) => ({
-          sku: brand,
-          tgt: tgt[brand] || 0,
-          act2026: act2026[brand] || 0,
-          act2025: act2025[brand] || 0,
-          vs25: act2025[brand]
-            ? (act2026[brand] / act2025[brand] - 1) * 100
-            : 0,
-        })),
-      };
-    }
+  //     result[period] = {
+  //       ranges: {
+  //         "2026": `${start2026.toDateString()} – ${end2026.toDateString()}`,
+  //         "2025": `${start2025.toDateString()} – ${end2025.toDateString()}`,
+  //       },
+  //       bySku: effectiveBrands.map((brand) => ({
+  //         sku: brand,
+  //         tgt: tgt[brand] || 0,
+  //         act2026: act2026[brand] || 0,
+  //         act2025: act2025[brand] || 0,
+  //         vs25: act2025[brand]
+  //           ? (act2026[brand] / act2025[brand] - 1) * 100
+  //           : 0,
+  //       })),
+  //     };
+  //   }
 
-    return result;
-  }, [
-    actualWeekStartMonth,
-    actualWeekStartDay,
-    actualWeekEndMonth,
-    actualWeekEndDay,
-    selectedMonth,
-    targetDaysInMonth,
-    targetDaysInWeek,
-    currentDayWorked,
-    effectiveBrands,
-    targets,
-    relevantSales2026,
-    relevantSales2025,
-  ]);
+  //   return result;
+  // }, [
+  //   actualWeekStartMonth,
+  //   actualWeekStartDay,
+  //   actualWeekEndMonth,
+  //   actualWeekEndDay,
+  //   selectedMonth,
+  //   targetDaysInMonth,
+  //   targetDaysInWeek,
+  //   currentDayWorked,
+  //   effectiveBrands,
+  //   targets,
+  //   relevantSales2026,
+  //   relevantSales2025,
+  // ]);
   const handleTargetUpload = async (file: File) => {
     setIsLoading(true);
     setError(null);
@@ -366,28 +475,6 @@ function App() {
               </p>
             )}
           </div>
-
-          <div className="dashboard-card dashboard-card--soft">
-            <h2 className="dashboard-heading">Quick summary</h2>
-            <div className="dashboard-body dashboard-summary-grid">
-              <SummaryCard
-                label="Brands in scope"
-                value={String(summary.brandsShown)}
-              />
-              <SummaryCard
-                label="WTD actual"
-                value={formatNumber(summary.totalWtd)}
-              />
-              <SummaryCard
-                label="MTD actual"
-                value={formatNumber(summary.totalMtd)}
-              />
-              <SummaryCard
-                label="YTD actual"
-                value={formatNumber(summary.totalYtd)}
-              />
-            </div>
-          </div>
         </section>
 
         <section className="dashboard-grid dashboard-grid--content">
@@ -414,18 +501,6 @@ function App() {
                   setActualWeekEndDay={setActualWeekEndDay}
                 />
               </div>
-              <ColorPicker
-                headerColor={headerColor}
-                setHeaderColor={setHeaderColor}
-                firstColColor={firstColColor}
-                setFirstColColor={setFirstColColor}
-                outlineColor={outlineColor}
-                setOutlineColor={setOutlineColor}
-                headerTextColor={headerTextColor}
-                setHeaderTextColor={setHeaderTextColor}
-                bodyTextColor={bodyTextColor}
-                setBodyTextColor={setBodyTextColor}
-              />
             </div>
 
             <div className="dashboard-card">
@@ -441,6 +516,24 @@ function App() {
                   selected={selectedBrands}
                   onChange={setSelectedBrands}
                   getGroupLabel={getBrandGroupLabel}
+                />
+              </div>
+            </div>
+
+            <div className="dashboard-card">
+              <h2 className="dashboard-heading">Style controls</h2>
+              <div className="dashboard-body">
+                <ColorPicker
+                  headerColor={headerColor}
+                  setHeaderColor={setHeaderColor}
+                  firstColColor={firstColColor}
+                  setFirstColColor={setFirstColColor}
+                  outlineColor={outlineColor}
+                  setOutlineColor={setOutlineColor}
+                  headerTextColor={headerTextColor}
+                  setHeaderTextColor={setHeaderTextColor}
+                  bodyTextColor={bodyTextColor}
+                  setBodyTextColor={setBodyTextColor}
                 />
               </div>
             </div>
@@ -478,8 +571,8 @@ function App() {
               <div className="dashboard-body">
                 <ResultsTable
                   period={activePeriod}
-                  rows={activeResults.rows}
-                  totals={activeResults.totals}
+                  rows={mergedActiveResults.rows}
+                  totals={mergedActiveResults.totals}
                   headerColor={headerColor}
                   firstColColor={firstColColor}
                   outlineColor={outlineColor}
@@ -499,52 +592,36 @@ function App() {
               </div>
               <div className="dashboard-body">
                 <YtgTable
-                  rows={ytgData.rows}
-                  total={ytgData.total}
+                  rows={mergedYtgData.rows}
+                  total={mergedYtgData.totals}
                   headerColor={headerColor}
                   firstColColor={firstColColor}
                   outlineColor={outlineColor}
                   headerTextColor={headerTextColor}
                   bodyTextColor={bodyTextColor}
                 />
-                <div className="dashboard-card">
-                  <h2>vs25 Full Debug</h2>
-                  {(["wtd", "mtd", "ytd"] as const).map((period) => (
-                    <div key={period} style={{ marginBottom: "2rem" }}>
-                      <h3>{period.toUpperCase()}</h3>
-                      <p>
-                        <strong>2026 Range:</strong>{" "}
-                        {vs25Debug[period].ranges["2026"]}
-                      </p>
-                      <p>
-                        <strong>2025 Range:</strong>{" "}
-                        {vs25Debug[period].ranges["2025"]}
-                      </p>
-                      <table className="dashboard-table">
-                        <thead>
-                          <tr>
-                            <th>SKU</th>
-                            <th>TGT</th>
-                            <th>ACT 2026</th>
-                            <th>ACT 2025</th>
-                            <th>vs25%</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {vs25Debug[period].bySku.map((row: any) => (
-                            <tr key={row.sku}>
-                              <td>{row.sku}</td>
-                              <td>{formatNumber(row.tgt)}</td>
-                              <td>{formatNumber(row.act2026)}</td>
-                              <td>{formatNumber(row.act2025)}</td>
-                              <td>{formatNumber(row.vs25)}%</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                </div>
+              </div>
+            </div>
+
+            <div className="dashboard-card dashboard-card--soft">
+              <h2 className="dashboard-heading">Quick summary</h2>
+              <div className="dashboard-body dashboard-summary-grid">
+                <SummaryCard
+                  label="Brands in scope"
+                  value={String(summary.brandsShown)}
+                />
+                <SummaryCard
+                  label="WTD actual"
+                  value={formatNumber(summary.totalWtd)}
+                />
+                <SummaryCard
+                  label="MTD actual"
+                  value={formatNumber(summary.totalMtd)}
+                />
+                <SummaryCard
+                  label="YTD actual"
+                  value={formatNumber(summary.totalYtd)}
+                />
               </div>
             </div>
           </div>
