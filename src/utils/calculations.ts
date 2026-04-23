@@ -109,8 +109,8 @@ export function buildPeriodTableRows(params: {
       fy25Act = sales2025Wtd.get(brand) ?? 0;
     } else if (period === 'mtd') {
       fy26Target = targetRow ? calculateMtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
-      fy26Act = sales2026Mtd.get(brand) ?? 0;
-      fy25Act = sales2025Mtd.get(brand) ?? 0;
+      fy26Act = Math.max(0, sales2026Mtd.get(brand) ?? 0);
+      fy25Act = Math.max(0, sales2025Mtd.get(brand) ?? 0);
     } else {
       fy26Target = targetRow ? calculateYtdTarget(targetRow, selectedMonth, clampedMonthDays, clampedCurrentDay) : 0;
       fy26Act = sales2026Ytd.get(brand) ?? 0;

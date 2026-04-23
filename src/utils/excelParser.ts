@@ -249,7 +249,7 @@ export const parseSalesFile = (file: File): Promise<SalesRow[]> => {
           if (!date) continue;
           
           const casesSold = toNumber(row[casesIndex]);
-          if (casesSold <= 0) continue;
+          if (casesSold === 0) continue;
           
           sales.push({ description, date, casesSold });
         }

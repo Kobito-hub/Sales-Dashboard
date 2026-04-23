@@ -22,6 +22,13 @@ const PERIOD_LABELS: Record<AnalysisPeriod, string> = {
   ytd: "Year to Date",
 };
 
+// Legacy SKU mapping: old 2025 product name → current 2026 product name
+const LEGACY_SKU_MAP: Record<string, string> = {
+  "3Cl Korect Bitters X 336": "5Cl Korect Bitters X 120",
+  "3cl Korect Bitters X 336": "5Cl Korect Bitters X 120",
+  "3CL KORECT BITTERS X 336": "5Cl Korect Bitters X 120",
+};
+
 function extractUnitValue(sku: string): number {
   const match = sku.match(/^(\d+(?:\.\d+)?)\s*(?:cl|ml|l)/i);
   return match ? parseFloat(match[1]) : Infinity;
@@ -34,22 +41,14 @@ function App() {
   const [sales2026, setSales2026] = useState<SalesRow[]>([]);
   const [sales2025, setSales2025] = useState<SalesRow[]>([]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [targetDaysInMonth, setTargetDaysInMonth] = useState<number>(31);
-  const [targetDaysInWeek, setTargetDaysInWeek] = useState<number>(5);
-  const [currentDayWorked, setCurrentDayWorked] = useState<number>(today.getDate());
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-  const [actualWeekStartMonth, setActualWeekStartMonth] = useState<number>(today.getMonth());
-  const [actualWeekStartDay, setActualWeekStartDay] = useState<number>(today.getDate());
-  const [actualWeekEndMonth, setActualWeekEndMonth] = useState<number>(today.getMonth());
-  const [actualWeekEndDay, setActualWeekEndDay] = useState<number>(today.getDate());
-  const [actualMonthStartMonth, setActualMonthStartMonth] = useState<number>(today.getMonth());
-  const [actualMonthStartDay, setActualMonthStartDay] = useState<number>(1);
-  const [actualMonthEndMonth, setActualMonthEndMonth] = useState<number>(today.getMonth());
-  const [actualMonthEndDay, setActualMonthEndDay] = useState<number>(today.getDate());
-  const [actualYearStartMonth, setActualYearStartMonth] = useState<number>(0);
-  const [actualYearStartDay, setActualYearStartDay] = useState<number>(1);
-  const [actualYearEndMonth, setActualYearEndMonth] = useState<number>(today.getMonth());
-  const [actualYearEndDay, setActualYearEndDay] = useState<number>(today.getDate());
+  const [targetDaysInMonth, setTargetDaysInMonth] = useState<number>(26);
+  const [targetDaysInWeek, setTargetDaysInWeek] = useState<number>(6);
+  const [currentDayWorked, setCurrentDayWorked] = useState<number>(16);
+  const [selectedMonth, setSelectedMonth] = useState<number>(3); // April = 3
+  const [actualWeekStartMonth, setActualWeekStartMonth] = useState<number>(3);
+  const [actualWeekStartDay, setActualWeekStartDay] = useState<number>(13);
+  const [actualWeekEndMonth, setActualWeekEndMonth] = useState<number>(3);
+  const [actualWeekEndDay, setActualWeekEndDay] = useState<number>(18);
   const [headerColor, setHeaderColor] = useState("#4F81BD");
   const [firstColColor, setFirstColColor] = useState("#DCE6F1");
   const [outlineColor, setOutlineColor] = useState("#D6D3D1");
@@ -75,7 +74,12 @@ function App() {
 
   const relevantSales2025 = useMemo(() => {
     if (!targets.size) return sales2025;
-    return mapSalesToTargetBrands(sales2025, targets);
+    // Apply legacy mapping before matching to targets
+    const mappedSales = sales2025.map((sale) => ({
+      ...sale,
+      description: LEGACY_SKU_MAP[sale.description] || sale.description,
+    }));
+    return mapSalesToTargetBrands(mappedSales, targets);
   }, [sales2025, targets]);
 
   const effectiveBrands = useMemo(() => {
@@ -83,86 +87,68 @@ function App() {
     return [...base].sort((a, b) => extractUnitValue(a) - extractUnitValue(b));
   }, [availableBrands, selectedBrands]);
 
-  const periodResults = useMemo(
-    () => ({
-      wtd: buildPeriodTableRows({
-        brands: effectiveBrands,
-        targets,
-        sales2026: relevantSales2026,
-        sales2025: relevantSales2025,
-        selectedMonth,
-        targetDaysInMonth,
-        targetDaysInWeek,
-        currentDayWorked,
-        actualWeekStartMonth,
-        actualWeekStartDay,
-        actualWeekEndMonth,
-        actualWeekEndDay,
-        actualMonthStartMonth,
-        actualMonthStartDay,
-        actualMonthEndMonth,
-        actualMonthEndDay,
-        actualYearStartMonth,
-        actualYearStartDay,
-        actualYearEndMonth,
-        actualYearEndDay,
-        period: "wtd",
-      }),
+  const periodResults = useMemo(() => {
+    // Derive MTD and YTD ranges from the week end date
+    const weekEnd = new Date(2026, actualWeekEndMonth, actualWeekEndDay);
+    const mtdStart = new Date(2026, selectedMonth, 1);
+    const ytdStart = new Date(2026, 0, 1);
+
+    const baseArgs = {
+      brands: effectiveBrands,
+      targets,
+      sales2026: relevantSales2026,
+      sales2025: relevantSales2025,
+      selectedMonth,
+      targetDaysInMonth,
+      targetDaysInWeek,
+      currentDayWorked,
+      actualWeekStartMonth,
+      actualWeekStartDay,
+      actualWeekEndMonth,
+      actualWeekEndDay,
+      actualMonthStartMonth: 0,
+      actualMonthStartDay: 1,
+      actualMonthEndMonth: 0,
+      actualMonthEndDay: 1,
+      actualYearStartMonth: 0,
+      actualYearStartDay: 1,
+      actualYearEndMonth: 0,
+      actualYearEndDay: 1,
+    };
+
+    return {
+      wtd: buildPeriodTableRows({ ...baseArgs, period: "wtd" }),
       mtd: buildPeriodTableRows({
-        brands: effectiveBrands,
-        targets,
-        sales2026: relevantSales2026,
-        sales2025: relevantSales2025,
-        selectedMonth,
-        targetDaysInMonth,
-        targetDaysInWeek,
-        currentDayWorked,
-        actualWeekStartMonth,
-        actualWeekStartDay,
-        actualWeekEndMonth,
-        actualWeekEndDay,
-        actualMonthStartMonth,
-        actualMonthStartDay,
-        actualMonthEndMonth,
-        actualMonthEndDay,
-        actualYearStartMonth,
-        actualYearStartDay,
-        actualYearEndMonth,
-        actualYearEndDay,
+        ...baseArgs,
+        actualMonthStartMonth: mtdStart.getMonth(),
+        actualMonthStartDay: mtdStart.getDate(),
+        actualMonthEndMonth: weekEnd.getMonth(),
+        actualMonthEndDay: weekEnd.getDate(),
         period: "mtd",
       }),
       ytd: buildPeriodTableRows({
-        brands: effectiveBrands,
-        targets,
-        sales2026: relevantSales2026,
-        sales2025: relevantSales2025,
-        selectedMonth,
-        targetDaysInMonth,
-        targetDaysInWeek,
-        currentDayWorked,
-        actualWeekStartMonth,
-        actualWeekStartDay,
-        actualWeekEndMonth,
-        actualWeekEndDay,
-        actualMonthStartMonth,
-        actualMonthStartDay,
-        actualMonthEndMonth,
-        actualMonthEndDay,
-        actualYearStartMonth,
-        actualYearStartDay,
-        actualYearEndMonth,
-        actualYearEndDay,
+        ...baseArgs,
+        actualYearStartMonth: ytdStart.getMonth(),
+        actualYearStartDay: ytdStart.getDate(),
+        actualYearEndMonth: weekEnd.getMonth(),
+        actualYearEndDay: weekEnd.getDate(),
         period: "ytd",
       }),
-    }),
-    [
-      actualYearEndDay, actualYearEndMonth, actualYearStartDay, actualYearStartMonth,
-      actualMonthEndDay, actualMonthEndMonth, actualMonthStartDay, actualMonthStartMonth,
-      actualWeekEndDay, actualWeekEndMonth, actualWeekStartDay, actualWeekStartMonth,
-      currentDayWorked, effectiveBrands, relevantSales2025, relevantSales2026,
-      selectedMonth, targetDaysInMonth, targetDaysInWeek, targets,
-    ],
-  );
+    };
+  }, [
+    actualWeekEndMonth,
+    actualWeekEndDay,
+    actualWeekStartMonth,
+    actualWeekStartDay,
+    selectedMonth,
+    targetDaysInMonth,
+    targetDaysInWeek,
+    currentDayWorked,
+    effectiveBrands,
+    targets,
+    relevantSales2026,
+    relevantSales2025,
+  ]);
 
   const activeResults = periodResults[activePeriod];
 
@@ -177,30 +163,138 @@ function App() {
   );
 
   const ytgData = useMemo(() => {
-    const sortedBrands = [...effectiveBrands].sort((a, b) => extractUnitValue(a) - extractUnitValue(b));
+    const weekEnd = new Date(2026, actualWeekEndMonth, actualWeekEndDay);
+    const sortedBrands = [...effectiveBrands].sort(
+      (a, b) => extractUnitValue(a) - extractUnitValue(b),
+    );
     const groupToProducts = new Map<string, string[]>();
-    sortedBrands.forEach(brand => groupToProducts.set(brand, [brand]));
+    sortedBrands.forEach((brand) => groupToProducts.set(brand, [brand]));
 
     return buildYtgRows({
       brands: sortedBrands,
       targets,
       sales2026: relevantSales2026,
-      actualYearStartMonth,
-      actualYearStartDay,
-      actualYearEndMonth,
-      actualYearEndDay,
+      actualYearStartMonth: 0,
+      actualYearStartDay: 1,
+      actualYearEndMonth: weekEnd.getMonth(),
+      actualYearEndDay: weekEnd.getDate(),
       groupToProducts,
     });
   }, [
     effectiveBrands,
     targets,
     relevantSales2026,
-    actualYearStartMonth,
-    actualYearStartDay,
-    actualYearEndMonth,
-    actualYearEndDay,
+    actualWeekEndMonth,
+    actualWeekEndDay,
   ]);
 
+  // Comprehensive debug for all periods
+  const vs25Debug = useMemo(() => {
+    const periods = ["wtd", "mtd", "ytd"] as const;
+    const result: any = {};
+
+    const weekEnd2026 = new Date(2026, actualWeekEndMonth, actualWeekEndDay);
+    const weekStart2026 = new Date(
+      2026,
+      actualWeekStartMonth,
+      actualWeekStartDay,
+    );
+    const mtdStart2026 = new Date(2026, selectedMonth, 1);
+    const ytdStart2026 = new Date(2026, 0, 1);
+
+    for (const period of periods) {
+      let start2026: Date, end2026: Date;
+      if (period === "wtd") {
+        start2026 = weekStart2026;
+        end2026 = weekEnd2026;
+      } else if (period === "mtd") {
+        start2026 = mtdStart2026;
+        end2026 = weekEnd2026;
+      } else {
+        start2026 = ytdStart2026;
+        end2026 = weekEnd2026;
+      }
+
+      // Shift to 2025
+      const start2025 = new Date(
+        2025,
+        start2026.getMonth(),
+        start2026.getDate(),
+      );
+      const end2025 = new Date(2025, end2026.getMonth(), end2026.getDate());
+
+      // Aggregate 2026
+      const act2026: Record<string, number> = {};
+      relevantSales2026.forEach((s) => {
+        if (s.date >= start2026 && s.date <= end2026) {
+          act2026[s.description] = (act2026[s.description] || 0) + s.casesSold;
+        }
+      });
+
+      // Aggregate 2025 (with mapping)
+      const act2025: Record<string, number> = {};
+      relevantSales2025.forEach((s) => {
+        if (s.date >= start2025 && s.date <= end2025) {
+          act2025[s.description] = (act2025[s.description] || 0) + s.casesSold;
+        }
+      });
+
+      // Target for period
+      const tgt: Record<string, number> = {};
+      effectiveBrands.forEach((brand) => {
+        const targetRow = targets.get(brand);
+        if (!targetRow) return;
+        if (period === "wtd") {
+          tgt[brand] =
+            (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
+            targetDaysInWeek;
+        } else if (period === "mtd") {
+          tgt[brand] =
+            (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
+            currentDayWorked;
+        } else {
+          const completed = targetRow.monthlyTargets
+            .slice(0, selectedMonth)
+            .reduce((a, b) => a + b, 0);
+          tgt[brand] =
+            completed +
+            (targetRow.monthlyTargets[selectedMonth] / targetDaysInMonth) *
+              currentDayWorked;
+        }
+      });
+
+      result[period] = {
+        ranges: {
+          "2026": `${start2026.toDateString()} – ${end2026.toDateString()}`,
+          "2025": `${start2025.toDateString()} – ${end2025.toDateString()}`,
+        },
+        bySku: effectiveBrands.map((brand) => ({
+          sku: brand,
+          tgt: tgt[brand] || 0,
+          act2026: act2026[brand] || 0,
+          act2025: act2025[brand] || 0,
+          vs25: act2025[brand]
+            ? (act2026[brand] / act2025[brand] - 1) * 100
+            : 0,
+        })),
+      };
+    }
+
+    return result;
+  }, [
+    actualWeekStartMonth,
+    actualWeekStartDay,
+    actualWeekEndMonth,
+    actualWeekEndDay,
+    selectedMonth,
+    targetDaysInMonth,
+    targetDaysInWeek,
+    currentDayWorked,
+    effectiveBrands,
+    targets,
+    relevantSales2026,
+    relevantSales2025,
+  ]);
   const handleTargetUpload = async (file: File) => {
     setIsLoading(true);
     setError(null);
@@ -211,7 +305,9 @@ function App() {
         current.filter((brand) => parsedTargets.has(brand)),
       );
     } catch (uploadError) {
-      setError(getErrorMessage(uploadError, "Unable to parse the target file."));
+      setError(
+        getErrorMessage(uploadError, "Unable to parse the target file."),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -225,7 +321,9 @@ function App() {
         const parsedSales = await parseSalesFile(file);
         setSales(parsedSales);
       } catch (uploadError) {
-        setError(getErrorMessage(uploadError, "Unable to parse the sales file."));
+        setError(
+          getErrorMessage(uploadError, "Unable to parse the sales file."),
+        );
       } finally {
         setIsLoading(false);
       }
@@ -263,17 +361,31 @@ function App() {
               </p>
             )}
             {error && (
-              <p className="dashboard-status dashboard-status--error">{error}</p>
+              <p className="dashboard-status dashboard-status--error">
+                {error}
+              </p>
             )}
           </div>
 
           <div className="dashboard-card dashboard-card--soft">
             <h2 className="dashboard-heading">Quick summary</h2>
             <div className="dashboard-body dashboard-summary-grid">
-              <SummaryCard label="Brands in scope" value={String(summary.brandsShown)} />
-              <SummaryCard label="WTD actual" value={formatNumber(summary.totalWtd)} />
-              <SummaryCard label="MTD actual" value={formatNumber(summary.totalMtd)} />
-              <SummaryCard label="YTD actual" value={formatNumber(summary.totalYtd)} />
+              <SummaryCard
+                label="Brands in scope"
+                value={String(summary.brandsShown)}
+              />
+              <SummaryCard
+                label="WTD actual"
+                value={formatNumber(summary.totalWtd)}
+              />
+              <SummaryCard
+                label="MTD actual"
+                value={formatNumber(summary.totalMtd)}
+              />
+              <SummaryCard
+                label="YTD actual"
+                value={formatNumber(summary.totalYtd)}
+              />
             </div>
           </div>
         </section>
@@ -300,22 +412,6 @@ function App() {
                   setActualWeekEndMonth={setActualWeekEndMonth}
                   actualWeekEndDay={actualWeekEndDay}
                   setActualWeekEndDay={setActualWeekEndDay}
-                  actualMonthStartMonth={actualMonthStartMonth}
-                  setActualMonthStartMonth={setActualMonthStartMonth}
-                  actualMonthStartDay={actualMonthStartDay}
-                  setActualMonthStartDay={setActualMonthStartDay}
-                  actualMonthEndMonth={actualMonthEndMonth}
-                  setActualMonthEndMonth={setActualMonthEndMonth}
-                  actualMonthEndDay={actualMonthEndDay}
-                  setActualMonthEndDay={setActualMonthEndDay}
-                  actualYearStartMonth={actualYearStartMonth}
-                  setActualYearStartMonth={setActualYearStartMonth}
-                  actualYearStartDay={actualYearStartDay}
-                  setActualYearStartDay={setActualYearStartDay}
-                  actualYearEndMonth={actualYearEndMonth}
-                  setActualYearEndMonth={setActualYearEndMonth}
-                  actualYearEndDay={actualYearEndDay}
-                  setActualYearEndDay={setActualYearEndDay}
                 />
               </div>
               <ColorPicker
@@ -335,7 +431,9 @@ function App() {
             <div className="dashboard-card">
               <div className="dashboard-card__header">
                 <h2 className="dashboard-heading">Brand selector</h2>
-                <span className="dashboard-meta">Populated from target sheet</span>
+                <span className="dashboard-meta">
+                  Populated from target sheet
+                </span>
               </div>
               <div className="dashboard-body">
                 <BrandSelector
@@ -373,9 +471,9 @@ function App() {
               </div>
               <div className="dashboard-body dashboard-note">
                 <strong>{PERIOD_LABELS[activePeriod]}:</strong> Target uses its
-                own controls while actuals come from the date ranges you choose
-                for week and month. YTD actual sums from January to the selected
-                month and current day worked.
+                own controls while actuals come from the week range you choose.
+                MTD and YTD actuals automatically use the Week End date as the
+                cut‑off.
               </div>
               <div className="dashboard-body">
                 <ResultsTable
@@ -409,6 +507,44 @@ function App() {
                   headerTextColor={headerTextColor}
                   bodyTextColor={bodyTextColor}
                 />
+                <div className="dashboard-card">
+                  <h2>vs25 Full Debug</h2>
+                  {(["wtd", "mtd", "ytd"] as const).map((period) => (
+                    <div key={period} style={{ marginBottom: "2rem" }}>
+                      <h3>{period.toUpperCase()}</h3>
+                      <p>
+                        <strong>2026 Range:</strong>{" "}
+                        {vs25Debug[period].ranges["2026"]}
+                      </p>
+                      <p>
+                        <strong>2025 Range:</strong>{" "}
+                        {vs25Debug[period].ranges["2025"]}
+                      </p>
+                      <table className="dashboard-table">
+                        <thead>
+                          <tr>
+                            <th>SKU</th>
+                            <th>TGT</th>
+                            <th>ACT 2026</th>
+                            <th>ACT 2025</th>
+                            <th>vs25%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vs25Debug[period].bySku.map((row: any) => (
+                            <tr key={row.sku}>
+                              <td>{row.sku}</td>
+                              <td>{formatNumber(row.tgt)}</td>
+                              <td>{formatNumber(row.act2026)}</td>
+                              <td>{formatNumber(row.act2025)}</td>
+                              <td>{formatNumber(row.vs25)}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -449,7 +585,9 @@ function mapSalesToTargetBrands(
   }
   return sales
     .map((sale) => {
-      const matchedTarget = targetKeyMap.get(getComparableSkuKey(sale.description));
+      const matchedTarget = targetKeyMap.get(
+        getComparableSkuKey(sale.description),
+      );
       if (!matchedTarget) return null;
       return { ...sale, description: matchedTarget };
     })
