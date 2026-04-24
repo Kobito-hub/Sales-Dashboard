@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { SalesRow, TargetRow } from '../types';
+import type { SalesRow, TargetRow, TerritoryTargetRow  } from '../types';
 
 const MONTH_NAMES = [
   'jan', 'feb', 'mar', 'apr', 'may', 'jun',
@@ -233,33 +233,38 @@ export const parseSalesFile = (file: File): Promise<SalesRow[]> => {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' });
         const headerRowIndex = findSalesHeaderRowIndex(json);
-        
+
         if (headerRowIndex === -1) {
           throw new Error('Sales dump must include Description, Date, and STD Cases Sold columns.');
         }
-        
+
         const headers = (json[headerRowIndex] ?? []).map(cell => normalizeText(cell));
         const descIndex = headers.findIndex(h => h.includes('description'));
         const dateIndex = headers.findIndex(h => h.includes('date'));
         const casesIndex = headers.findIndex(h => h.includes('std') && h.includes('cases'));
-        
+        const territoryIndex = headers.findIndex(h => h.includes('territory'));
+        const regionIndex = headers.findIndex(h => h.includes('region'));
+
         if (descIndex === -1 || dateIndex === -1 || casesIndex === -1) {
           throw new Error('Missing required columns in sales dump.');
         }
-        
+
         const sales: SalesRow[] = [];
         for (let i = headerRowIndex + 1; i < json.length; i++) {
           const row = json[i] ?? [];
           const description = String(row[descIndex] ?? '').trim();
           if (!description || !ALLOWED_PRODUCT_NAMES.has(description)) continue;
-          
+
           const date = parseSpreadsheetDate(row[dateIndex]);
           if (!date) continue;
-          
+
           const casesSold = toNumber(row[casesIndex]);
           if (casesSold === 0) continue;
-          
-          sales.push({ description, date, casesSold });
+
+          const territory = territoryIndex !== -1 ? String(row[territoryIndex] ?? '').trim() : '';
+          const region = regionIndex !== -1 ? String(row[regionIndex] ?? '').trim() : '';
+
+          sales.push({ description, date, casesSold, territory, region });
         }
         resolve(sales);
       } catch (error) {
@@ -274,6 +279,81 @@ export const parseSalesFile = (file: File): Promise<SalesRow[]> => {
 // ----------------------------------------------------------------------
 // HELPERS
 // ----------------------------------------------------------------------
+// Helper: extract first word after unit
+function extractBrandFromDescription(desc: string): string {
+  const cleaned = desc.replace(/^\d+(?:\.\d+)?\s*(?:cl|ml|l)\s+/i, '').trim();
+  return cleaned.split(/\s+/)[0] ?? '';
+}
+
+// Parse month names/abbreviations/numbers
+const MONTH_NAMES_FULL = ['january','february','march','april','may','june',
+                          'july','august','september','october','november','december'];
+const MONTH_ABBR = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function parseMonth(raw: string): number {
+  const lower = raw.toLowerCase().trim();
+  const fullIdx = MONTH_NAMES_FULL.indexOf(lower);
+  if (fullIdx !== -1) return fullIdx + 1;
+  const abbrIdx = MONTH_ABBR.indexOf(lower);
+  if (abbrIdx !== -1) return abbrIdx + 1;
+  const num = parseInt(lower, 10);
+  return (!isNaN(num) && num >= 1 && num <= 12) ? num : -1;
+}
+
+export const parseTerritoryFile = (file: File): Promise<TerritoryTargetRow[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' });
+
+        const headerRowIndex = rows.findIndex(r =>
+          (r as unknown[]).some(cell => normalizeText(cell) === 'territory')
+        );
+        if (headerRowIndex === -1) throw new Error('Territory header not found.');
+
+        const headers = (rows[headerRowIndex] ?? []).map(c => normalizeText(c));
+        const territoryIdx = headers.indexOf('territory');
+        const regionIdx = headers.indexOf('region');
+        const descIdx = headers.findIndex(h => h.includes('item description'));
+        const monthIdx = headers.findIndex(h => h === 'month' || h === 'mon');
+        const stdCaseIdx = headers.findIndex(h => h.includes('std case'));
+
+        if (territoryIdx === -1 || descIdx === -1 || monthIdx === -1 || stdCaseIdx === -1) {
+          throw new Error('Missing required columns in Territory file.');
+        }
+
+        const result: TerritoryTargetRow[] = [];
+        for (let r = headerRowIndex + 1; r < rows.length; r++) {
+          const row = rows[r] ?? [];
+          const territory = String(row[territoryIdx] ?? '').trim();
+          const region = regionIdx !== -1 ? String(row[regionIdx] ?? '').trim() : '';
+          const description = String(row[descIdx] ?? '').trim();
+          const monthRaw = String(row[monthIdx] ?? '').trim();
+          const stdCases = toNumber(row[stdCaseIdx]);
+
+          if (!territory || !description || !monthRaw) continue;
+
+          const brand = extractBrandFromDescription(description);
+          if (!brand) continue;
+
+          // Exclude Regal Ginger variants
+          if (brand.toLowerCase() === 'regal' && description.toLowerCase().includes('ginger')) continue;
+
+          const monthNum = parseMonth(monthRaw);
+          if (monthNum === -1) continue;
+
+          result.push({ territory, region, description, brand, month: monthNum, stdCases });
+        }
+        resolve(result);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+};
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim().toLowerCase();
 }

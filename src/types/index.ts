@@ -7,6 +7,8 @@ export interface SalesRow {
   description: string;
   date: Date;
   casesSold: number;
+  territory: string;
+  region: string;
 }
 
 export interface ProcessedData {
@@ -20,9 +22,9 @@ export interface TableRow {
   fy26Target: number;
   fy26Act: number;
   fy25Act: number;
-  contributionPercent: number; // Act / total actual * 100
-  actVsTarget: number; // (Act / Tgt) * 100
-  vs25: number; // (Act2026 / Act2025 - 1)*100
+  contributionPercent: number;
+  actVsTarget: number;
+  vs25: number;
 }
 
 export interface YtgRow {
@@ -31,6 +33,24 @@ export interface YtgRow {
   ytdActual: number;
   ytdAchievedPercent: number;
   ytgBalance: number;
+}
+
+export interface TerritoryTargetRow {
+  territory: string;
+  region: string;
+  description: string;
+  brand: string;
+  month: number;
+  stdCases: number;
+}
+
+export interface TerritoryTableRow {
+  territory: string;    // territory or region name
+  tgt: number;
+  ach: number;
+  tgtVsAch: number;
+  contributionPercent: number;
+  shortfall: number;
 }
 
 export type AnalysisPeriod = 'wtd' | 'mtd' | 'ytd';

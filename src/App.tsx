@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { AnalysisPeriod, SalesRow, TargetRow } from "./types";
 import "./App.css";
 import FileUploader from "./components/FileUploader";
 import BrandSelector from "./components/BrandSelector";
@@ -16,6 +15,9 @@ import {
   parseSalesFile,
   parseTargetFile,
 } from "./utils/excelParser";
+import { parseTerritoryFile } from "./utils/excelParser";
+import TerritoryTable from "./components/TerritoryTable";
+import type { AnalysisPeriod, SalesRow, TargetRow, TerritoryTargetRow, TerritoryTableRow,  } from "./types";
 
 const PERIOD_LABELS: Record<AnalysisPeriod, string> = {
   wtd: "Week to Date",
@@ -56,6 +58,10 @@ function App() {
   const [activePeriod, setActivePeriod] = useState<AnalysisPeriod>("ytd");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [territoryData, setTerritoryData] = useState<TerritoryTargetRow[]>([]);
+  const [territoryQuarter, setTerritoryQuarter] = useState<
+    "Q1" | "Q2" | "Q3" | "Q4"
+  >("Q1");
 
   const availableBrands = useMemo(() => {
     const allProducts = new Set([
@@ -245,6 +251,95 @@ function App() {
     actualWeekEndMonth,
     actualWeekEndDay,
   ]);
+  const quarterMonths = useMemo(
+    () => ({
+      Q1: [1, 2, 3],
+      Q2: [4, 5, 6],
+      Q3: [7, 8, 9],
+      Q4: [10, 11, 12],
+    }),
+    [],
+  );
+
+  // Selected brand group – pick the first selected brand for territory view
+  const selectedBrandGroup = useMemo(() => {
+    if (effectiveBrands.length === 0) return null;
+    const firstBrand = effectiveBrands[0];
+    return getBrandGroupLabel(firstBrand);
+  }, [effectiveBrands]);
+
+  // Top Territories
+  const topTerritoriesRows = useMemo(() => {
+    if (!territoryData.length || !selectedBrandGroup) return [];
+    const months = quarterMonths[territoryQuarter];
+
+    // Filter target rows
+    const targetRows = territoryData.filter((r) => {
+      if (!months.includes(r.month)) return false;
+      const descBrand = extractBrand(r.description);
+      // Match to selected brand group (compare first word)
+      return (
+        descBrand.toLowerCase() ===
+        selectedBrandGroup.toLowerCase().split(" ")[0]?.toLowerCase()
+      );
+    });
+
+    // Aggregate TGT by territory
+    const tgtMap = new Map<string, number>();
+    targetRows.forEach((r) => {
+      tgtMap.set(r.territory, (tgtMap.get(r.territory) ?? 0) + r.stdCases);
+    });
+
+    // ACH from sales2026 (filter by same quarter and brand, exclude Ginger)
+    const qStart = new Date(2026, months[0] - 1, 1);
+    const qEnd = new Date(2026, months[2] - 1, 31);
+    const achMap = new Map<string, number>();
+    relevantSales2026.forEach((s) => {
+      if (s.date < qStart || s.date > qEnd) return;
+      const descBrand = extractBrand(s.description);
+      if (
+        descBrand.toLowerCase() !==
+        selectedBrandGroup.toLowerCase().split(" ")[0]?.toLowerCase()
+      )
+        return;
+      // Exclude Ginger for Regal
+      if (
+        descBrand.toLowerCase() === "regal" &&
+        s.description.toLowerCase().includes("ginger")
+      )
+        return;
+      achMap.set(s.territory, (achMap.get(s.territory) ?? 0) + s.casesSold);
+    });
+
+    // Build rows
+    const allTerritories = new Set([...tgtMap.keys(), ...achMap.keys()]);
+    const rows: TerritoryTableRow[] = [];
+    allTerritories.forEach((territory) => {
+      const tgt = tgtMap.get(territory) ?? 0;
+      const ach = achMap.get(territory) ?? 0;
+      rows.push({
+        territory,
+        tgt,
+        ach,
+        tgtVsAch: tgt > 0 ? (ach / tgt) * 100 : 0,
+        contributionPercent: 0, // will compute after
+        shortfall: tgt - ach,
+      });
+    });
+
+    const totalAch = rows.reduce((sum, r) => sum + r.ach, 0);
+    rows.forEach((r) => {
+      r.contributionPercent = totalAch > 0 ? (r.ach / totalAch) * 100 : 0;
+    });
+
+    return rows.sort((a, b) => b.ach - a.ach);
+  }, [
+    territoryData,
+    territoryQuarter,
+    relevantSales2026,
+    quarterMonths,
+    selectedBrandGroup,
+  ]);
   const mergedYtgData = useMemo(() => {
     const rows = ytgData.rows;
     const mergedMap = new Map<
@@ -277,6 +372,7 @@ function App() {
       const ytgBalance = r.target2026 - r.ytdActual;
       return { ...r, ytdAchievedPercent, ytgBalance };
     });
+    
 
     const totalTarget = mergedRows.reduce((sum, r) => sum + r.target2026, 0);
     const totalYtdActual = mergedRows.reduce((sum, r) => sum + r.ytdActual, 0);
@@ -296,6 +392,80 @@ function App() {
 
     return { rows: mergedRows, totals };
   }, [ytgData]);
+  const regionalOverviewRows = useMemo(() => {
+      if (!territoryData.length || !selectedBrandGroup) return [];
+      const months = quarterMonths[territoryQuarter];
+
+      const targetRows = territoryData.filter((r) => {
+        if (!months.includes(r.month)) return false;
+        const descBrand = extractBrand(r.description);
+        return (
+          descBrand.toLowerCase() ===
+          selectedBrandGroup.toLowerCase().split(" ")[0]?.toLowerCase()
+        );
+      });
+
+      const tgtByRegion = new Map<string, number>();
+      targetRows.forEach((r) => {
+        tgtByRegion.set(
+          r.region,
+          (tgtByRegion.get(r.region) ?? 0) + r.stdCases,
+        );
+      });
+
+      const qStart = new Date(2026, months[0] - 1, 1);
+      const qEnd = new Date(2026, months[2] - 1, 31);
+      const achByRegion = new Map<string, number>();
+      relevantSales2026.forEach((s) => {
+        if (s.date < qStart || s.date > qEnd) return;
+        const descBrand = extractBrand(s.description);
+        if (
+          descBrand.toLowerCase() !==
+          selectedBrandGroup.toLowerCase().split(" ")[0]?.toLowerCase()
+        )
+          return;
+        if (
+          descBrand.toLowerCase() === "regal" &&
+          s.description.toLowerCase().includes("ginger")
+        )
+          return;
+        achByRegion.set(
+          s.region,
+          (achByRegion.get(s.region) ?? 0) + s.casesSold,
+        );
+      });
+
+      const allRegions = new Set([
+        ...tgtByRegion.keys(),
+        ...achByRegion.keys(),
+      ]);
+      const rows: TerritoryTableRow[] = [];
+      allRegions.forEach((region) => {
+        const tgt = tgtByRegion.get(region) ?? 0;
+        const ach = achByRegion.get(region) ?? 0;
+        rows.push({
+          territory: region, // reuse the field for display
+          tgt,
+          ach,
+          tgtVsAch: tgt > 0 ? (ach / tgt) * 100 : 0,
+          contributionPercent: 0,
+          shortfall: tgt - ach,
+        });
+      });
+
+      const totalAch = rows.reduce((sum, r) => sum + r.ach, 0);
+      rows.forEach((r) => {
+        r.contributionPercent = totalAch > 0 ? (r.ach / totalAch) * 100 : 0;
+      });
+
+      return rows.sort((a, b) => b.ach - a.ach);
+    }, [
+      territoryData,
+      territoryQuarter,
+      relevantSales2026,
+      quarterMonths,
+      selectedBrandGroup,
+    ]);
 
   // Comprehensive debug for all periods
   // const vs25Debug = useMemo(() => {
@@ -404,6 +574,18 @@ function App() {
   //   relevantSales2026,
   //   relevantSales2025,
   // ]);
+  const handleTerritoryUpload = async (file: File) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const parsed = await parseTerritoryFile(file);
+      setTerritoryData(parsed);
+    } catch (e) {
+      setError(getErrorMessage(e, "Territory file error"));
+    } finally {
+      setIsLoading(false);
+    }
+  };
   const handleTargetUpload = async (file: File) => {
     setIsLoading(true);
     setError(null);
@@ -437,6 +619,10 @@ function App() {
         setIsLoading(false);
       }
     };
+  function extractBrand(desc: string): string {
+    const cleaned = desc.replace(/^\d+(?:\.\d+)?\s*(?:cl|ml|l)\s+/i, "").trim();
+    return cleaned.split(/\s+/)[0] ?? "";
+  }
 
   return (
     <main className="dashboard-app">
@@ -462,6 +648,10 @@ function App() {
               <FileUploader
                 label="Sales dump 2025"
                 onUpload={handleSalesUpload(setSales2025)}
+              />
+              <FileUploader
+                label="Territory/Region Target"
+                onUpload={handleTerritoryUpload}
               />
             </div>
             {isLoading && (
@@ -601,7 +791,85 @@ function App() {
                   bodyTextColor={bodyTextColor}
                 />
               </div>
+              
             </div>
+             {/* Top Territories */}
+              <div className="dashboard-card">
+                <div className="dashboard-card__header">
+                  <div>
+                    <h2 className="dashboard-heading">Top Territories</h2>
+                    <p className="dashboard-copy">
+                      Performance by territory for the selected quarter.
+                    </p>
+                  </div>
+                  <div className="dashboard-pill-group">
+                    {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => setTerritoryQuarter(q)}
+                        className={`dashboard-pill ${territoryQuarter === q ? "is-active" : ""}`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="dashboard-body">
+                  {selectedBrandGroup ? (
+                    <TerritoryTable
+                      title={`${selectedBrandGroup} ${territoryQuarter}`}
+                      rows={topTerritoriesRows}
+                      headerColor={headerColor}
+                      firstColColor={firstColColor}
+                      outlineColor={outlineColor}
+                      headerTextColor={headerTextColor}
+                      bodyTextColor={bodyTextColor}
+                      shortfallLabel={`${territoryQuarter} STF`}
+                    />
+                  ) : (
+                    <p>Select a brand group to view territory data.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Regional Overview */}
+              <div className="dashboard-card">
+                <div className="dashboard-card__header">
+                  <div>
+                    <h2 className="dashboard-heading">Regional Overview</h2>
+                    <p className="dashboard-copy">
+                      Performance by region for the selected quarter.
+                    </p>
+                  </div>
+                  <div className="dashboard-pill-group">
+                    {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => setTerritoryQuarter(q)}
+                        className={`dashboard-pill ${territoryQuarter === q ? "is-active" : ""}`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="dashboard-body">
+                  {selectedBrandGroup ? (
+                    <TerritoryTable
+                      title={`${selectedBrandGroup} ${territoryQuarter}`}
+                      rows={regionalOverviewRows}
+                      headerColor={headerColor}
+                      firstColColor={firstColColor}
+                      outlineColor={outlineColor}
+                      headerTextColor={headerTextColor}
+                      bodyTextColor={bodyTextColor}
+                      shortfallLabel={`${territoryQuarter} STF`}
+                    />
+                  ) : (
+                    <p>Select a brand group to view region data.</p>
+                  )}
+                </div>
+              </div>
 
             <div className="dashboard-card dashboard-card--soft">
               <h2 className="dashboard-heading">Quick summary</h2>
