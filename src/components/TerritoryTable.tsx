@@ -40,14 +40,28 @@ export default function TerritoryTable({
     await navigator.clipboard.writeText(arr.map(r => r.join('\t')).join('\n'));
   };
 
+  const totals = rows.length > 0 ? {
+    territory: 'TOTAL',
+    tgt: rows.reduce((sum, row) => sum + row.tgt, 0),
+    ach: rows.reduce((sum, row) => sum + row.ach, 0),
+    tgtVsAch: (() => {
+      const totalTgt = rows.reduce((sum, row) => sum + row.tgt, 0);
+      const totalAch = rows.reduce((sum, row) => sum + row.ach, 0);
+      return totalTgt > 0 ? (totalAch / totalTgt) * 100 : 0;
+    })(),
+    contributionPercent: rows.length > 0 ? 100 : 0,
+    shortfall: rows.reduce((sum, row) => sum + row.shortfall, 0),
+  } : null;
+
   return (
     <div>
       <div className="mb-2 flex gap-2">
         <button onClick={exportToExcel} className="rounded bg-green-600 px-4 py-1 text-white">Excel</button>
         <button onClick={copyTable} className="rounded bg-blue-600 px-4 py-1 text-white">Copy</button>
       </div>
-      <table ref={tableRef} className="w-full border-collapse overflow-hidden rounded-2xl text-left text-sm"
-        style={{ color: bodyTextColor }}>
+      <div className="dashboard-table-center">
+        <table ref={tableRef} className="border-collapse overflow-hidden rounded-2xl text-left text-sm max-w-full"
+          style={{ color: bodyTextColor }}>
         <thead>
           <tr>
             <th colSpan={6} className="px-4 py-3 text-center text-base font-semibold"
@@ -75,9 +89,20 @@ export default function TerritoryTable({
               <td style={cell(outlineColor)}>{fmt(r.shortfall)}</td>
             </tr>
           ))}
+          {totals && (
+            <tr className="font-semibold bg-slate-100">
+              <td style={cell(outlineColor, firstColColor)}>TOTAL</td>
+              <td style={cell(outlineColor)}>{fmt(totals.tgt)}</td>
+              <td style={cell(outlineColor)}>{fmt(totals.ach)}</td>
+              <td style={cell(outlineColor)}>{fmt(totals.tgtVsAch)}%</td>
+              <td style={cell(outlineColor)}>{fmt(totals.contributionPercent)}%</td>
+              <td style={cell(outlineColor)}>{fmt(totals.shortfall)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
+  </div>
   );
 }
 

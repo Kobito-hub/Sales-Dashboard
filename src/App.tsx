@@ -628,7 +628,7 @@ function App() {
     <main className="dashboard-app">
       <div className="dashboard-shell">
         <section className="dashboard-hero">
-          <p className="dashboard-kicker">Mancom Dashboard</p>
+          <p className="dashboard-kicker">Mancom Dashboard Calculator</p>
           <h1 className="dashboard-title">Weekly sales volume analysis</h1>
           <p className="dashboard-subtitle">
             Upload the 2026 sales dump, 2026 target sheet, and 2025 sales dump
@@ -710,7 +710,7 @@ function App() {
               </div>
             </div>
 
-            <div className="dashboard-card">
+            <div className="dashboard-card dashboard-card--style-controls">
               <h2 className="dashboard-heading">Style controls</h2>
               <div className="dashboard-body">
                 <ColorPicker

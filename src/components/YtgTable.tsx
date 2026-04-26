@@ -75,11 +75,12 @@ export default function YtgTable({
           Copy Table
         </button>
       </div>
-      <table
-        ref={tableRef}
-        className="w-full border-collapse overflow-hidden rounded-2xl text-left text-sm"
-        style={{ color: bodyTextColor }}
-      >
+      <div className="dashboard-table-center">
+        <table
+          ref={tableRef}
+          className="border-collapse overflow-hidden rounded-2xl text-left text-sm max-w-full"
+          style={{ color: bodyTextColor }}
+        >
         <thead>
           {/* Title row */}
           <tr>
@@ -132,6 +133,7 @@ export default function YtgTable({
         </tbody>
       </table>
     </div>
+  </div>
   );
 }
 
