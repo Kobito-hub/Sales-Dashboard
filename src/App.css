@@ -1,6 +1,6 @@
 .dashboard-app {
   min-height: 100vh;
-  padding: 2rem 1rem 3rem;
+  padding: 2rem 1rem 7rem;
   background:
     radial-gradient(circle at top, rgba(0, 255, 234, 0.28), transparent 28%),
     linear-gradient(180deg, #fbf7ef 0%, #f6efe3 52%, #efe6d7 100%);
@@ -71,11 +71,29 @@
 }
 
 .dashboard-grid--intro {
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
 }
 
-.dashboard-grid--content {
-  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+.dashboard-grid--intro > .dashboard-card,
+.dashboard-grid--controls > .dashboard-card {
+  width: min(100%, 980px);
+}
+
+.dashboard-grid--controls,
+.dashboard-grid--summary {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+
+.dashboard-grid--reports,
+.dashboard-grid--territory {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.dashboard-grid--summary > .dashboard-card {
+  width: min(100%, 900px);
 }
 
 .dashboard-stack {
@@ -162,7 +180,7 @@
 .dashboard-upload-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .dashboard-upload-card {
@@ -515,9 +533,72 @@
   color: #b91c1c;
 }
 
+.bottom-segmented-nav {
+  position: fixed;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  width: min(calc(100% - 2rem), 22rem);
+  height: 4rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  padding: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: #7f1010;
+  box-shadow:
+    0 18px 48px rgba(88, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transform: translateX(-50%);
+}
+
+.bottom-segmented-nav__indicator {
+  position: absolute;
+  inset: 0.45rem auto 0.45rem 0.45rem;
+  width: calc(50% - 0.45rem);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 14px 30px rgba(255, 255, 255, 0.28),
+    0 8px 26px rgba(127, 16, 16, 0.35);
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.bottom-segmented-nav__indicator.is-right {
+  transform: translateX(100%);
+}
+
+.bottom-segmented-nav__button {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff7ed;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  transition:
+    color 0.24s ease,
+    transform 0.24s ease;
+}
+
+.bottom-segmented-nav__button.is-active {
+  color: #7f1010;
+}
+
+.bottom-segmented-nav__button:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 3px;
+}
+
 @media (max-width: 1100px) {
   .dashboard-grid--intro,
-  .dashboard-grid--content {
+  .dashboard-grid--reports,
+  .dashboard-grid--territory {
     grid-template-columns: 1fr;
   }
 
@@ -526,7 +607,7 @@
   }
 
   .dashboard-upload-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dashboard-controls__grid--target,
@@ -539,6 +620,7 @@
   .dashboard-app {
     padding-inline: 0.75rem;
     padding-top: 1.25rem;
+    padding-bottom: 6.5rem;
   }
 
   .dashboard-hero,
@@ -548,6 +630,10 @@
   }
 
   .dashboard-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-upload-grid {
     grid-template-columns: 1fr;
   }
 
@@ -564,5 +650,10 @@
   .dashboard-selector__group-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .bottom-segmented-nav {
+    width: min(calc(100% - 1.5rem), 20rem);
+    height: 3.65rem;
   }
 }

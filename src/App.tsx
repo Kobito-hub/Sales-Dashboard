@@ -38,6 +38,7 @@ function extractUnitValue(sku: string): number {
 }
 
 function App() {
+  const [activePage, setActivePage] = useState<"man" | "territory">("man");
   const [targets, setTargets] = useState<Map<string, TargetRow>>(new Map());
   const [sales2026, setSales2026] = useState<SalesRow[]>([]);
   const [sales2025, setSales2025] = useState<SalesRow[]>([]);
@@ -91,6 +92,7 @@ function App() {
     const base = selectedBrands.length > 0 ? selectedBrands : availableBrands;
     return [...base].sort((a, b) => extractUnitValue(b) - extractUnitValue(a));
   }, [availableBrands, selectedBrands]);
+  const hasSelectedBrands = selectedBrands.length > 0;
 
   const periodResults = useMemo(() => {
     // Derive MTD and YTD ranges from the week end date
@@ -263,10 +265,10 @@ function App() {
 
   // Selected brand group – pick the first selected brand for territory view
   const selectedBrandGroup = useMemo(() => {
-    if (effectiveBrands.length === 0) return null;
-    const firstBrand = effectiveBrands[0];
+    if (selectedBrands.length === 0) return null;
+    const firstBrand = selectedBrands[0];
     return getBrandGroupLabel(firstBrand);
-  }, [effectiveBrands]);
+  }, [selectedBrands]);
 
   // Top Territories
   const topTerritoriesRows = useMemo(() => {
@@ -636,101 +638,103 @@ function App() {
           </p>
         </section>
 
-        <section className="dashboard-grid dashboard-grid--intro">
-          <div className="dashboard-card dashboard-card--soft">
-            <h2 className="dashboard-heading">Upload source files</h2>
-            <div className="dashboard-body dashboard-upload-grid">
-              <FileUploader
-                label="Sales dump 2026"
-                onUpload={handleSalesUpload(setSales2026)}
-              />
-              <FileUploader label="Target" onUpload={handleTargetUpload} />
-              <FileUploader
-                label="Sales dump 2025"
-                onUpload={handleSalesUpload(setSales2025)}
-              />
-              <FileUploader
-                label="Territory/Region Target"
-                onUpload={handleTerritoryUpload}
-              />
-            </div>
-            {isLoading && (
-              <p className="dashboard-status dashboard-status--loading">
-                Processing workbook...
-              </p>
-            )}
-            {error && (
-              <p className="dashboard-status dashboard-status--error">
-                {error}
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="dashboard-grid dashboard-grid--content">
-          <div className="dashboard-stack">
-            <div className="dashboard-card">
-              <h2 className="dashboard-heading">Controls</h2>
-              <div className="dashboard-body">
-                <DateControls
-                  targetDaysInMonth={targetDaysInMonth}
-                  setTargetDaysInMonth={setTargetDaysInMonth}
-                  targetDaysInWeek={targetDaysInWeek}
-                  setTargetDaysInWeek={setTargetDaysInWeek}
-                  currentDayWorked={currentDayWorked}
-                  setCurrentDayWorked={setCurrentDayWorked}
-                  selectedMonth={selectedMonth}
-                  setSelectedMonth={setSelectedMonth}
-                  actualWeekStartMonth={actualWeekStartMonth}
-                  setActualWeekStartMonth={setActualWeekStartMonth}
-                  actualWeekStartDay={actualWeekStartDay}
-                  setActualWeekStartDay={setActualWeekStartDay}
-                  actualWeekEndMonth={actualWeekEndMonth}
-                  setActualWeekEndMonth={setActualWeekEndMonth}
-                  actualWeekEndDay={actualWeekEndDay}
-                  setActualWeekEndDay={setActualWeekEndDay}
-                />
+        {activePage === "man" && (
+          <>
+            <section className="dashboard-grid dashboard-grid--intro">
+              <div className="dashboard-card dashboard-card--soft">
+                <h2 className="dashboard-heading">Upload source files</h2>
+                <div className="dashboard-body dashboard-upload-grid">
+                  <FileUploader
+                    label="Sales dump 2026"
+                    onUpload={handleSalesUpload(setSales2026)}
+                  />
+                  <FileUploader label="Target" onUpload={handleTargetUpload} />
+                  <FileUploader
+                    label="Sales dump 2025"
+                    onUpload={handleSalesUpload(setSales2025)}
+                  />
+                  <FileUploader
+                    label="Territory/Region Target"
+                    onUpload={handleTerritoryUpload}
+                  />
+                </div>
+                {isLoading && (
+                  <p className="dashboard-status dashboard-status--loading">
+                    Processing workbook...
+                  </p>
+                )}
+                {error && (
+                  <p className="dashboard-status dashboard-status--error">
+                    {error}
+                  </p>
+                )}
               </div>
-            </div>
+            </section>
 
-            <div className="dashboard-card">
-              <div className="dashboard-card__header">
-                <h2 className="dashboard-heading">Brand selector</h2>
-                <span className="dashboard-meta">
-                  Populated from target sheet
-                </span>
+            <section className="dashboard-grid dashboard-grid--controls">
+              <div className="dashboard-card">
+                <h2 className="dashboard-heading">Controls</h2>
+                <div className="dashboard-body">
+                  <DateControls
+                    targetDaysInMonth={targetDaysInMonth}
+                    setTargetDaysInMonth={setTargetDaysInMonth}
+                    targetDaysInWeek={targetDaysInWeek}
+                    setTargetDaysInWeek={setTargetDaysInWeek}
+                    currentDayWorked={currentDayWorked}
+                    setCurrentDayWorked={setCurrentDayWorked}
+                    selectedMonth={selectedMonth}
+                    setSelectedMonth={setSelectedMonth}
+                    actualWeekStartMonth={actualWeekStartMonth}
+                    setActualWeekStartMonth={setActualWeekStartMonth}
+                    actualWeekStartDay={actualWeekStartDay}
+                    setActualWeekStartDay={setActualWeekStartDay}
+                    actualWeekEndMonth={actualWeekEndMonth}
+                    setActualWeekEndMonth={setActualWeekEndMonth}
+                    actualWeekEndDay={actualWeekEndDay}
+                    setActualWeekEndDay={setActualWeekEndDay}
+                  />
+                </div>
               </div>
-              <div className="dashboard-body">
-                <BrandSelector
-                  brands={availableBrands}
-                  selected={selectedBrands}
-                  onChange={setSelectedBrands}
-                  getGroupLabel={getBrandGroupLabel}
-                />
-              </div>
-            </div>
 
-            <div className="dashboard-card dashboard-card--style-controls">
-              <h2 className="dashboard-heading">Style controls</h2>
-              <div className="dashboard-body">
-                <ColorPicker
-                  headerColor={headerColor}
-                  setHeaderColor={setHeaderColor}
-                  firstColColor={firstColColor}
-                  setFirstColColor={setFirstColColor}
-                  outlineColor={outlineColor}
-                  setOutlineColor={setOutlineColor}
-                  headerTextColor={headerTextColor}
-                  setHeaderTextColor={setHeaderTextColor}
-                  bodyTextColor={bodyTextColor}
-                  setBodyTextColor={setBodyTextColor}
-                />
+              <div className="dashboard-card">
+                <div className="dashboard-card__header">
+                  <h2 className="dashboard-heading">Brand selector</h2>
+                  <span className="dashboard-meta">
+                    Populated from target sheet
+                  </span>
+                </div>
+                <div className="dashboard-body">
+                  <BrandSelector
+                    brands={availableBrands}
+                    selected={selectedBrands}
+                    onChange={setSelectedBrands}
+                    getGroupLabel={getBrandGroupLabel}
+                  />
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="dashboard-stack">
-            <div className="dashboard-card">
+              <div className="dashboard-card dashboard-card--style-controls">
+                <h2 className="dashboard-heading">Style controls</h2>
+                <div className="dashboard-body">
+                  <ColorPicker
+                    headerColor={headerColor}
+                    setHeaderColor={setHeaderColor}
+                    firstColColor={firstColColor}
+                    setFirstColColor={setFirstColColor}
+                    outlineColor={outlineColor}
+                    setOutlineColor={setOutlineColor}
+                    headerTextColor={headerTextColor}
+                    setHeaderTextColor={setHeaderTextColor}
+                    bodyTextColor={bodyTextColor}
+                    setBodyTextColor={setBodyTextColor}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {hasSelectedBrands && (
+              <section className="dashboard-grid dashboard-grid--reports">
+                <div className="dashboard-card">
               <div className="dashboard-card__header">
                 <div>
                   <h2 className="dashboard-heading">Performance analysis</h2>
@@ -793,7 +797,15 @@ function App() {
               </div>
               
             </div>
-             {/* Top Territories */}
+              </section>
+            )}
+          </>
+        )}
+
+        {activePage === "territory" && (
+          <>
+            <section className="dashboard-grid dashboard-grid--territory">
+              {/* Top Territories */}
               <div className="dashboard-card">
                 <div className="dashboard-card__header">
                   <div>
@@ -871,31 +883,73 @@ function App() {
                 </div>
               </div>
 
-            <div className="dashboard-card dashboard-card--soft">
-              <h2 className="dashboard-heading">Quick summary</h2>
-              <div className="dashboard-body dashboard-summary-grid">
-                <SummaryCard
-                  label="Brands in scope"
-                  value={String(summary.brandsShown)}
-                />
-                <SummaryCard
-                  label="WTD actual"
-                  value={formatNumber(summary.totalWtd)}
-                />
-                <SummaryCard
-                  label="MTD actual"
-                  value={formatNumber(summary.totalMtd)}
-                />
-                <SummaryCard
-                  label="YTD actual"
-                  value={formatNumber(summary.totalYtd)}
-                />
+            </section>
+
+            <section className="dashboard-grid dashboard-grid--summary">
+              <div className="dashboard-card dashboard-card--soft">
+                <h2 className="dashboard-heading">Quick summary</h2>
+                <div className="dashboard-body dashboard-summary-grid">
+                  <SummaryCard
+                    label="Brands in scope"
+                    value={String(summary.brandsShown)}
+                  />
+                  <SummaryCard
+                    label="WTD actual"
+                    value={formatNumber(summary.totalWtd)}
+                  />
+                  <SummaryCard
+                    label="MTD actual"
+                    value={formatNumber(summary.totalMtd)}
+                  />
+                  <SummaryCard
+                    label="YTD actual"
+                    value={formatNumber(summary.totalYtd)}
+                  />
+                </div>
               </div>
-            </div>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </div>
+      <BottomSegmentedNav activePage={activePage} onChange={setActivePage} />
     </main>
+  );
+}
+
+function BottomSegmentedNav({
+  activePage,
+  onChange,
+}: {
+  activePage: "man" | "territory";
+  onChange: (page: "man" | "territory") => void;
+}) {
+  return (
+    <nav className="bottom-segmented-nav" aria-label="Dashboard pages">
+      <span
+        className={`bottom-segmented-nav__indicator ${
+          activePage === "territory" ? "is-right" : ""
+        }`}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        className={`bottom-segmented-nav__button ${
+          activePage === "man" ? "is-active" : ""
+        }`}
+        onClick={() => onChange("man")}
+      >
+        MAN
+      </button>
+      <button
+        type="button"
+        className={`bottom-segmented-nav__button ${
+          activePage === "territory" ? "is-active" : ""
+        }`}
+        onClick={() => onChange("territory")}
+      >
+        TER/REG
+      </button>
+    </nav>
   );
 }
 
